@@ -1,0 +1,117 @@
+import { useEffect, useState } from 'react';
+
+export function LoadingScreen({ onDone }: { onDone: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState(0);
+
+  const phases = [
+    'ИНИЦИАЛИЗАЦИЯ СИСТЕМЫ',
+    'ЗАГРУЗКА ПРОТОКОЛОВ',
+    'АНТИБОТ ВЕРИФИКАЦИЯ',
+    'ПОДКЛЮЧЕНИЕ К СЕРВЕРУ',
+    'ГОТОВО',
+  ];
+
+  useEffect(() => {
+    const duration = 2400;
+    const steps = 100;
+    const interval = duration / steps;
+    let current = 0;
+
+    const timer = setInterval(() => {
+      current++;
+      setProgress(current);
+      setPhase(Math.floor((current / steps) * (phases.length - 1)));
+      if (current >= steps) {
+        clearInterval(timer);
+        setTimeout(onDone, 250);
+      }
+    }, interval);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: '#050508',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      {/* Grid bg */}
+      <div className="grid-bg" />
+
+      {/* Glow orbs */}
+      <div style={{ position: 'absolute', width: '300px', height: '300px', borderRadius: '50%', background: 'rgba(124,58,255,0.08)', filter: 'blur(80px)', top: '20%', left: '30%' }} />
+      <div style={{ position: 'absolute', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(0,255,140,0.05)', filter: 'blur(60px)', bottom: '25%', right: '30%' }} />
+
+      {/* Content */}
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px', width: '320px' }}>
+
+        {/* Logo */}
+        <div style={{ position: 'relative' }}>
+          <svg width="80" height="80" viewBox="0 0 100 100">
+            {/* Outer ring */}
+            <circle cx="50" cy="50" r="45" stroke="rgba(124,58,255,0.2)" strokeWidth="1" fill="none"
+              style={{ animation: 'loadSpin 4s linear infinite' }}
+            />
+            {/* Dashed ring */}
+            <circle cx="50" cy="50" r="38" stroke="rgba(0,255,140,0.15)" strokeWidth="1" strokeDasharray="8 4" fill="none"
+              style={{ animation: 'loadSpin 2s linear infinite reverse' }}
+            />
+            {/* Hex */}
+            <polygon points="50,15 80,32 80,68 50,85 20,68 20,32" stroke="rgba(168,85,247,0.5)" strokeWidth="1" fill="rgba(124,58,255,0.1)" />
+            {/* Inner glow */}
+            <circle cx="50" cy="50" r="22" fill="rgba(124,58,255,0.15)" />
+            <text x="50" y="56" textAnchor="middle" fontSize="13" fontFamily="Orbitron" fill="white" fontWeight="900">RA</text>
+
+            {/* Loading arc */}
+            <circle cx="50" cy="50" r="45" stroke="#7c3aff" strokeWidth="2" fill="none"
+              strokeDasharray={`${progress * 2.83} 283`}
+              strokeLinecap="round"
+              transform="rotate(-90 50 50)"
+              style={{ transition: 'stroke-dasharray 0.05s linear' }}
+            />
+          </svg>
+        </div>
+
+        {/* Title */}
+        <div style={{ textAlign: 'center' }}>
+          <div className="font-orbitron" style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '0.2em', color: '#c084fc', marginBottom: '6px' }}>
+            RBX<span style={{ color: '#00ff8c' }}>ARENA</span>
+          </div>
+          <div className="font-mono-tech" style={{ fontSize: '11px', color: 'rgba(0,255,140,0.5)', letterSpacing: '0.1em' }}>
+            ROBLOX TOURNAMENT PLATFORM
+          </div>
+        </div>
+
+        {/* Progress */}
+        <div style={{ width: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span className="font-mono-tech" style={{ fontSize: '10px', color: 'rgba(168,85,247,0.7)', letterSpacing: '0.08em' }}>
+              {phases[phase]}
+            </span>
+            <span className="font-mono-tech" style={{ fontSize: '10px', color: 'rgba(0,255,140,0.6)' }}>
+              {progress}%
+            </span>
+          </div>
+          <div className="progress-bar" style={{ height: '3px' }}>
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+
+        {/* Dots */}
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} style={{
+              width: '5px', height: '5px', borderRadius: '50%',
+              background: i < Math.floor(progress / 25) ? '#7c3aff' : 'rgba(124,58,255,0.15)',
+              boxShadow: i < Math.floor(progress / 25) ? '0 0 8px rgba(124,58,255,0.8)' : 'none',
+              transition: 'all 0.3s ease',
+            }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
