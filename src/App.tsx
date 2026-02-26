@@ -19,14 +19,14 @@ interface ToastItem { id: string; message: string; type: 'success' | 'error' | '
 
 interface AppCtx {
   user: User | null;
-  refreshUser: () => void;
+  refreshUser: () => Promise<void>;
   navigate: (page: Page, data?: any) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
   currentPage: Page;
 }
 
 export const AppContext = createContext<AppCtx>({
-  user: null, refreshUser: () => {}, navigate: () => {}, showToast: () => {}, currentPage: 'home',
+  user: null, refreshUser: async () => {}, navigate: () => {}, showToast: () => {}, currentPage: 'home',
 });
 
 export const useApp = () => useContext(AppContext);
@@ -39,14 +39,15 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   useEffect(() => {
-    initDB();
-    const u = getCurrentUser();
-    setUser(u);
-    // Loading screen handles its own timer
+    initDB().then(async () => {
+      const u = await getCurrentUser();
+      setUser(u);
+    });
   }, []);
 
-  const refreshUser = useCallback(() => {
-    setUser(getCurrentUser());
+  const refreshUser = useCallback(async () => {
+    const u = await getCurrentUser();
+    setUser(u);
   }, []);
 
   const navigate = useCallback((page: Page, data?: any) => {
@@ -64,8 +65,8 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     setUser(null);
     setCurrentPage('home');
     showToast('Вы вышли из аккаунта', 'info');

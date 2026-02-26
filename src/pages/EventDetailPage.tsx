@@ -1,262 +1,198 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../App';
-import { getEvent, getUserById, getTeam, joinEvent, leaveEvent, type GameEvent } from '../store/db';
+import { getEvent, joinEvent, leaveEvent, getTeam, getUserById, type GameEvent } from '../store/db';
 
-function Countdown({ endsAt }: { endsAt: number }) {
-  const [timeLeft, setTimeLeft] = useState(endsAt - Date.now());
-  useEffect(() => {
-    const i = setInterval(() => setTimeLeft(endsAt - Date.now()), 1000);
-    return () => clearInterval(i);
-  }, [endsAt]);
-  if (timeLeft <= 0) return <span className="badge badge-red">ВРЕМЯ ВЫШЛО</span>;
-  const d = Math.floor(timeLeft / 86400000);
-  const h = Math.floor((timeLeft / 3600000) % 24);
-  const m = Math.floor((timeLeft / 60000) % 60);
-  const s = Math.floor((timeLeft / 1000) % 60);
-  return (
-    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-      {d > 0 && <div className="countdown-segment"><div className="countdown-num" style={{ fontSize: '24px' }}>{d}</div><div className="countdown-label">ДН</div></div>}
-      <div className="countdown-segment"><div className="countdown-num" style={{ fontSize: '24px' }}>{String(h).padStart(2,'0')}</div><div className="countdown-label">ЧАС</div></div>
-      <div className="countdown-segment"><div className="countdown-num" style={{ fontSize: '24px', color: '#a855f7' }}>{String(m).padStart(2,'0')}</div><div className="countdown-label">МИН</div></div>
-      <div className="countdown-segment"><div className="countdown-num" style={{ fontSize: '24px', color: '#00ff8c' }}>{String(s).padStart(2,'0')}</div><div className="countdown-label">СЕК</div></div>
-    </div>
-  );
-}
-
-export function EventDetailPage({ eventId }: { eventId?: string }) {
+export function EventDetailPage({ eventId }: { eventId: string }) {
   const { user, navigate, showToast } = useApp();
   const [event, setEvent] = useState<GameEvent | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [participantNames, setParticipantNames] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (eventId) setEvent(getEvent(eventId));
-    const i = setInterval(() => { if (eventId) setEvent(getEvent(eventId)); }, 3000);
-    return () => clearInterval(i);
-  }, [eventId]);
-
-  if (!event) {
-    return (
-      <div style={{ maxWidth: '860px', margin: '0 auto', padding: '80px 20px', textAlign: 'center' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.3 }}>◈</div>
-        <div className="font-orbitron" style={{ color: 'rgba(200,180,255,0.3)', letterSpacing: '0.1em' }}>ИВЕНТ НЕ НАЙДЕН</div>
-        <button className="btn-secondary" style={{ marginTop: '20px' }} onClick={() => navigate('events')}>← НАЗАД</button>
-      </div>
-    );
-  }
-
-  const typeData: Record<string, { label: string; stripe: string }> = {
-    giveaway: { label: 'РОЗЫГРЫШ', stripe: 'linear-gradient(90deg, #7c3aff, #a855f7)' },
-    tournament: { label: 'ТУРНИР', stripe: 'linear-gradient(90deg, #f97316, #ef4444)' },
-    event: { label: 'ИВЕНТ', stripe: 'linear-gradient(90deg, #06b6d4, #3b82f6)' },
+  const loadEvent = async () => {
+    const e = await getEvent(eventId);
+    setEvent(e);
+    setLoading(false);
+    if (e) await loadParticipants(e);
   };
-  const td = typeData[event.type] || typeData.event;
 
-  const isTournament = event.type === 'tournament';
-  const isParticipating = user ? event.participants.includes(isTournament && user.teamId ? user.teamId : user.id) : false;
+  const loadParticipants = async (e: GameEvent) => {
+    const names: string[] = [];
+    for (const pid of e.participants.slice(0, 20)) {
+      if (e.type === 'tournament') {
+        const team = await getTeam(pid);
+        names.push(team ? `[${team.name}]` : pid);
+      } else {
+        const u = await getUserById(pid);
+        names.push(u ? u.robloxUsername : pid);
+      }
+    }
+    setParticipantNames(names);
+  };
+
+  useEffect(() => { loadEvent(); }, [eventId]);
 
   const handleJoin = async () => {
-    if (!user) { showToast('Войдите для участия', 'error'); navigate('login'); return; }
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-    let pid = user.id;
-    if (isTournament) {
-      if (!user.teamId) { showToast('Для турнира нужна команда! Создайте в профиле.', 'error'); setLoading(false); return; }
-      pid = user.teamId;
+    if (!user) { navigate('login'); return; }
+    setActionLoading(true);
+    let participantId = user.id;
+    if (event?.type === 'tournament') {
+      if (!user.teamId) { showToast('Для участия в турнире нужна команда!', 'error'); setActionLoading(false); return; }
+      participantId = user.teamId;
     }
-    const result = joinEvent(event.id, pid);
-    setLoading(false);
-    if (result.success) { showToast('Вы участвуете!', 'success'); setEvent(getEvent(event.id)); }
-    else showToast(result.error || 'Ошибка', 'error');
+    const res = await joinEvent(eventId, participantId);
+    if (res.success) {
+      showToast('Вы успешно записались!', 'success');
+      await loadEvent();
+    } else {
+      showToast(res.error || 'Ошибка', 'error');
+    }
+    setActionLoading(false);
   };
 
   const handleLeave = async () => {
     if (!user) return;
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 300));
-    const pid = isTournament && user.teamId ? user.teamId : user.id;
-    const result = leaveEvent(event.id, pid);
-    setLoading(false);
-    if (result.success) { showToast('Вы вышли', 'info'); setEvent(getEvent(event.id)); }
+    setActionLoading(true);
+    let participantId = user.id;
+    if (event?.type === 'tournament' && user.teamId) participantId = user.teamId;
+    const res = await leaveEvent(eventId, participantId);
+    if (res.success) {
+      showToast('Вы вышли из события', 'info');
+      await loadEvent();
+    } else {
+      showToast(res.error || 'Ошибка', 'error');
+    }
+    setActionLoading(false);
   };
 
-  const getParticipantName = (pid: string) => {
-    if (isTournament) { const t = getTeam(pid); return t ? t.name : pid; }
-    const u = getUserById(pid); return u ? u.username : pid;
+  if (loading) return (
+    <div style={{ textAlign: 'center', padding: '100px 20px' }}>
+      <div className="spinner" style={{ width: '48px', height: '48px', margin: '0 auto 16px', borderWidth: '3px' }} />
+      <p style={{ color: 'rgba(200,180,255,0.4)', fontFamily: 'Rajdhani, sans-serif' }}>Загрузка...</p>
+    </div>
+  );
+
+  if (!event) return (
+    <div style={{ textAlign: 'center', padding: '100px 20px' }}>
+      <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+      <p className="font-orbitron" style={{ color: 'rgba(200,180,255,0.5)' }}>СОБЫТИЕ НЕ НАЙДЕНО</p>
+      <button className="btn-secondary" onClick={() => navigate('events')} style={{ marginTop: '20px' }}>← НАЗАД</button>
+    </div>
+  );
+
+  const typeData: Record<string, { label: string; color: string; stripe: string }> = {
+    giveaway: { label: 'РОЗЫГРЫШ', color: '#a855f7', stripe: 'linear-gradient(90deg, #7c3aff, #a855f7)' },
+    tournament: { label: 'ТУРНИР', color: '#f97316', stripe: 'linear-gradient(90deg, #f97316, #ef4444)' },
+    event: { label: 'ИВЕНТ', color: '#06b6d4', stripe: 'linear-gradient(90deg, #06b6d4, #3b82f6)' },
   };
-  const getParticipantRoblox = (pid: string) => {
-    if (isTournament) { const t = getTeam(pid); return t ? t.memberIds.map(m => getUserById(m)?.robloxUsername || '?').join(', ') : ''; }
-    const u = getUserById(pid); return u ? u.robloxUsername : '';
-  };
+  const td = typeData[event.type] || typeData.event;
+
+  const isParticipant = user ? (
+    event.type === 'tournament' && user.teamId
+      ? event.participants.includes(user.teamId)
+      : event.participants.includes(user.id)
+  ) : false;
+
+  const timeLeft = event.endsAt - Date.now();
+  const isActive = event.status === 'active' && timeLeft > 0;
 
   return (
-    <div style={{ maxWidth: '860px', margin: '0 auto', padding: '32px 20px 80px' }}>
-      <button className="btn-secondary" style={{ padding: '7px 14px', fontSize: '10px', marginBottom: '24px' }} onClick={() => navigate('events')}>
-        ← НАЗАД
-      </button>
+    <div style={{ maxWidth: '860px', margin: '0 auto', padding: '40px 20px 80px' }}>
+      <button className="btn-secondary" onClick={() => navigate('events')} style={{ marginBottom: '28px', padding: '8px 16px', fontSize: '12px' }}>← НАЗАД</button>
 
-      <div className="anim-fade-up">
-        {/* Top stripe */}
-        <div style={{ height: '3px', background: td.stripe, borderRadius: '2px 2px 0 0' }} />
-
-        <div className="panel" style={{ borderRadius: '0 0 16px 16px', borderTop: 'none', overflow: 'hidden' }}>
-          {/* Hero header */}
-          <div style={{ padding: '28px 28px 24px', background: 'linear-gradient(135deg, rgba(124,58,255,0.06), rgba(0,255,140,0.02))', borderBottom: '1px solid rgba(124,58,255,0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-              <span className={`badge ${event.type === 'giveaway' ? 'badge-purple' : event.type === 'tournament' ? 'badge-orange' : 'badge-cyan'}`}>{td.label}</span>
-              {event.tournamentMode && <span className="badge badge-purple">{event.tournamentMode}</span>}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                {event.status === 'active' && <span className="status-dot-active" />}
-                <span className="font-mono-tech" style={{ fontSize: '11px', color: event.status === 'active' ? '#00ff8c' : 'rgba(200,180,255,0.3)' }}>
-                  {event.status === 'active' ? 'LIVE' : event.status === 'ended' ? 'ENDED' : 'CANCELLED'}
-                </span>
-              </div>
-            </div>
-            <h1 className="font-orbitron" style={{ fontSize: '22px', fontWeight: 900, color: '#e2d9ff', letterSpacing: '0.06em', marginBottom: '0' }}>
-              {event.title}
-            </h1>
+      <div className="panel panel-top-glow" style={{ overflow: 'hidden', marginBottom: '24px' }}>
+        <div style={{ height: '4px', background: td.stripe }} />
+        <div style={{ padding: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            <span className="badge" style={{ background: `${td.color}20`, border: `1px solid ${td.color}40`, color: td.color }}>{td.label}</span>
+            {event.tournamentMode && <span className="badge badge-purple">{event.tournamentMode}</span>}
+            <span className={`badge ${isActive ? 'badge-green' : 'badge-red'}`}>
+              {isActive ? '🟢 АКТИВНО' : event.status === 'ended' ? '⚫ ЗАВЕРШЕНО' : '🔴 ОТМЕНЕНО'}
+            </span>
           </div>
 
-          <div style={{ padding: '28px' }}>
-            {/* Countdown */}
-            {event.status === 'active' && (
-              <div style={{ textAlign: 'center', marginBottom: '28px', padding: '20px', background: 'rgba(8,6,20,0.6)', border: '1px solid rgba(124,58,255,0.12)', borderRadius: '10px' }}>
-                <div className="font-orbitron" style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(168,85,247,0.5)', marginBottom: '14px' }}>ДО ОКОНЧАНИЯ</div>
-                <Countdown endsAt={event.endsAt} />
-              </div>
-            )}
+          <h1 className="font-orbitron" style={{ fontSize: '26px', fontWeight: 900, color: '#e2d9ff', marginBottom: '16px' }}>{event.title}</h1>
+          <p style={{ fontSize: '16px', color: 'rgba(200,180,255,0.6)', lineHeight: '1.8', fontFamily: 'Rajdhani, sans-serif', marginBottom: '24px' }}>{event.description}</p>
 
-            {/* Stats grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '24px' }}>
-              {[
-                { label: 'УЧАСТНИКОВ', value: event.participants.length, color: '#a855f7' },
-                ...(event.maxParticipants > 0 ? [{ label: 'ЛИМИТ', value: event.maxParticipants, color: '#00ff8c' }] : []),
-                { label: 'СОЗДАН', value: new Date(event.createdAt).toLocaleDateString('ru'), color: '#c084fc' },
-                { label: 'КОНЕЦ', value: new Date(event.endsAt).toLocaleDateString('ru'), color: '#c084fc' },
-              ].map((s, i) => (
-                <div key={i} style={{ padding: '14px 12px', background: 'rgba(8,6,20,0.6)', border: '1px solid rgba(124,58,255,0.1)', borderRadius: '8px', textAlign: 'center' }}>
-                  <div className="font-orbitron" style={{ fontSize: '16px', fontWeight: 700, color: s.color, marginBottom: '4px' }}>{s.value}</div>
-                  <div className="font-orbitron" style={{ fontSize: '8px', color: 'rgba(200,180,255,0.3)', letterSpacing: '0.1em' }}>{s.label}</div>
-                </div>
-              ))}
+          {event.prize && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 18px', background: 'rgba(0,255,140,0.05)', border: '1px solid rgba(0,255,140,0.15)', borderRadius: '10px', marginBottom: '24px' }}>
+              <span style={{ fontSize: '24px' }}>🏆</span>
+              <div>
+                <div style={{ fontSize: '11px', color: 'rgba(0,255,140,0.5)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.1em' }}>ПРИЗ</div>
+                <div style={{ fontSize: '18px', color: '#00ff8c', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{event.prize}</div>
+              </div>
             </div>
+          )}
 
-            {/* Description */}
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                <div style={{ width: '3px', height: '14px', background: 'linear-gradient(180deg, #7c3aff, #00ff8c)', borderRadius: '2px' }} />
-                <span className="font-orbitron" style={{ fontSize: '9px', letterSpacing: '0.15em', color: 'rgba(168,85,247,0.6)' }}>ОПИСАНИЕ</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+            {[
+              { label: 'УЧАСТНИКОВ', value: `${event.participants.length}${event.maxParticipants > 0 ? ` / ${event.maxParticipants}` : ''}`, icon: '👥' },
+              { label: 'СОЗДАН', value: new Date(event.createdAt).toLocaleDateString('ru'), icon: '📅' },
+              { label: 'ЗАКАНЧИВАЕТСЯ', value: new Date(event.endsAt).toLocaleDateString('ru'), icon: '⏰' },
+            ].map((item, i) => (
+              <div key={i} style={{ padding: '14px 16px', background: 'rgba(124,58,255,0.05)', border: '1px solid rgba(124,58,255,0.12)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '18px', marginBottom: '6px' }}>{item.icon}</div>
+                <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.08em', marginBottom: '4px' }}>{item.label}</div>
+                <div style={{ fontSize: '16px', color: '#c084fc', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{item.value}</div>
               </div>
-              <p style={{ fontSize: '14px', color: 'rgba(200,180,255,0.6)', lineHeight: '1.7', whiteSpace: 'pre-wrap', fontFamily: 'Rajdhani, sans-serif' }}>
-                {event.description}
-              </p>
-            </div>
+            ))}
+          </div>
 
-            {/* Prize */}
-            {event.prize && (
-              <div style={{ marginBottom: '20px', padding: '14px 16px', background: 'rgba(0,255,140,0.04)', border: '1px solid rgba(0,255,140,0.15)', borderRadius: '8px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <span style={{ fontSize: '18px' }}>🏆</span>
-                <div>
-                  <div className="font-orbitron" style={{ fontSize: '9px', color: 'rgba(0,255,140,0.5)', letterSpacing: '0.1em', marginBottom: '3px' }}>ПРИЗ</div>
-                  <div style={{ fontSize: '14px', color: 'rgba(0,255,140,0.8)', fontFamily: 'Rajdhani, sans-serif' }}>{event.prize}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Progress bar */}
-            {event.maxParticipants > 0 && (
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span className="font-orbitron" style={{ fontSize: '9px', color: 'rgba(168,85,247,0.5)', letterSpacing: '0.1em' }}>ЗАПОЛНЕННОСТЬ</span>
-                  <span className="font-mono-tech" style={{ fontSize: '11px', color: '#a855f7' }}>{Math.round(event.participants.length / event.maxParticipants * 100)}%</span>
-                </div>
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${Math.min(100, event.participants.length / event.maxParticipants * 100)}%` }} />
-                </div>
-              </div>
-            )}
-
-            {/* Join */}
-            {event.status === 'active' && (
-              <div style={{ marginBottom: '28px', textAlign: 'center' }}>
-                {isParticipating ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
-                    <div style={{ padding: '10px 20px', background: 'rgba(0,255,140,0.06)', border: '1px solid rgba(0,255,140,0.2)', borderRadius: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span className="status-dot-active" />
-                      <span className="font-orbitron" style={{ fontSize: '11px', color: '#00ff8c', letterSpacing: '0.08em' }}>ВЫ УЧАСТВУЕТЕ</span>
-                    </div>
-                    <button className="btn-danger" onClick={handleLeave} disabled={loading}>
-                      {loading ? '...' : 'ПОКИНУТЬ'}
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <button className="btn-primary glow-pulse" onClick={handleJoin} disabled={loading} style={{ padding: '14px 36px', fontSize: '12px' }}>
-                      {loading ? (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div className="load-ring" style={{ width: '14px', height: '14px', borderWidth: '2px' }} />
-                          ПРОВЕРКА...
-                        </span>
-                      ) : isTournament ? '▶ УЧАСТВОВАТЬ КОМАНДОЙ' : '▶ УЧАСТВОВАТЬ'}
-                    </button>
-                    {isTournament && !user?.teamId && (
-                      <p style={{ marginTop: '10px', fontSize: '12px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif' }}>
-                        Для турнира нужна команда.{' '}
-                        <button onClick={() => navigate('profile')} style={{ color: '#a855f7', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Orbitron, monospace', fontSize: '11px' }}>
-                          СОЗДАТЬ →
-                        </button>
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Winners */}
-            {event.status === 'ended' && event.winners.length > 0 && (
-              <div style={{ marginBottom: '24px', padding: '18px', background: 'rgba(251,191,36,0.04)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '18px' }}>🏆</span>
-                  <span className="font-orbitron" style={{ fontSize: '12px', color: '#fbbf24', letterSpacing: '0.1em' }}>ПОБЕДИТЕЛИ</span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {event.winners.map(wid => (
-                    <div key={wid} style={{ padding: '8px 14px', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '6px' }}>
-                      <div className="font-orbitron" style={{ fontSize: '12px', color: '#fbbf24' }}>{getParticipantName(wid)}</div>
-                      <div style={{ fontSize: '11px', color: 'rgba(251,191,36,0.5)', fontFamily: 'Share Tech Mono, monospace' }}>{getParticipantRoblox(wid)}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Participants */}
+          {isActive && (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ width: '3px', height: '14px', background: 'linear-gradient(180deg, #7c3aff, #00ff8c)', borderRadius: '2px' }} />
-                <span className="font-orbitron" style={{ fontSize: '9px', letterSpacing: '0.15em', color: 'rgba(168,85,247,0.6)' }}>
-                  УЧАСТНИКИ ({event.participants.length})
-                </span>
-              </div>
-              {event.participants.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', color: 'rgba(200,180,255,0.2)', fontSize: '13px', fontFamily: 'Rajdhani, sans-serif' }}>Пока нет участников</div>
+              {!user ? (
+                <button className="btn-primary" onClick={() => navigate('login')} style={{ padding: '14px 32px', fontSize: '14px' }}>
+                  ▶ ВОЙДИТЕ ДЛЯ УЧАСТИЯ
+                </button>
+              ) : isParticipant ? (
+                <button className="btn-secondary" onClick={handleLeave} disabled={actionLoading} style={{ padding: '14px 32px', fontSize: '14px', borderColor: 'rgba(239,68,68,0.4)', color: '#ef4444' }}>
+                  {actionLoading ? <span className="spinner" /> : '✕ ПОКИНУТЬ'}
+                </button>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px', maxHeight: '320px', overflowY: 'auto' }} className="no-scrollbar">
-                  {event.participants.map((pid, i) => (
-                    <div key={pid} className="team-member-card">
-                      <span className="font-mono-tech" style={{ fontSize: '11px', color: 'rgba(200,180,255,0.25)', width: '20px' }}>{i + 1}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="font-orbitron" style={{ fontSize: '11px', color: '#c084fc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getParticipantName(pid)}</div>
-                        <div className="font-mono-tech" style={{ fontSize: '10px', color: 'rgba(200,180,255,0.3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getParticipantRoblox(pid)}</div>
-                      </div>
-                      {event.winners.includes(pid) && <span style={{ fontSize: '14px' }}>🏆</span>}
-                    </div>
-                  ))}
-                </div>
+                <button className="btn-primary" onClick={handleJoin} disabled={actionLoading} style={{ padding: '14px 32px', fontSize: '14px' }}>
+                  {actionLoading ? <span className="spinner" /> : '▶ УЧАСТВОВАТЬ'}
+                </button>
+              )}
+              {event.type === 'tournament' && !user?.teamId && (
+                <p style={{ fontSize: '13px', color: 'rgba(249,115,22,0.7)', marginTop: '10px', fontFamily: 'Rajdhani, sans-serif' }}>
+                  ⚠ Для участия в турнире создайте команду в{' '}
+                  <span style={{ color: '#f97316', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => navigate('profile')}>профиле</span>
+                </p>
               )}
             </div>
-          </div>
+          )}
+
+          {event.status === 'ended' && event.winners.length > 0 && (
+            <div style={{ padding: '20px', background: 'rgba(0,255,140,0.05)', border: '1px solid rgba(0,255,140,0.2)', borderRadius: '10px' }}>
+              <div className="font-orbitron" style={{ fontSize: '14px', color: '#00ff8c', marginBottom: '12px', letterSpacing: '0.1em' }}>🏆 ПОБЕДИТЕЛИ</div>
+              {event.winners.map((wid, i) => (
+                <div key={i} style={{ fontSize: '15px', color: '#c084fc', fontFamily: 'Rajdhani, sans-serif' }}>#{i + 1} {wid}</div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Participants */}
+      {participantNames.length > 0 && (
+        <div className="panel" style={{ padding: '24px' }}>
+          <h3 className="font-orbitron" style={{ fontSize: '13px', color: 'rgba(200,180,255,0.6)', letterSpacing: '0.1em', marginBottom: '16px' }}>
+            УЧАСТНИКИ ({event.participants.length})
+          </h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {participantNames.map((name, i) => (
+              <span key={i} className="badge" style={{ background: 'rgba(124,58,255,0.1)', border: '1px solid rgba(124,58,255,0.2)', color: '#c084fc', fontSize: '13px', padding: '5px 10px' }}>
+                {name}
+              </span>
+            ))}
+            {event.participants.length > 20 && (
+              <span className="badge" style={{ background: 'rgba(124,58,255,0.05)', color: 'rgba(200,180,255,0.4)', fontSize: '13px' }}>
+                +{event.participants.length - 20} ещё
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

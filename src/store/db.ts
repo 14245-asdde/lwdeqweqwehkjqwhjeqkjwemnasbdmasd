@@ -1,14 +1,35 @@
-// LocalStorage-based database (Firebase-ready structure)
-// To connect Firebase: replace these functions with Firestore calls
+// ============================================================
+//  TRAXER PLACE — Firebase Firestore Database Layer
+// ============================================================
 
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  arrayUnion,
+  arrayRemove,
+  onSnapshot,
+  type Unsubscribe,
+} from 'firebase/firestore';
+import { db } from '../firebase/firebaseConfig';
 import { v4 as uuidv4 } from 'uuid';
+
+// ─── Types ────────────────────────────────────────────────────
 
 export interface User {
   id: string;
   username: string;
-  password: string; // In production, hash this
+  password: string;
   robloxUsername: string;
-  robloxUsernameLastChanged: number; // timestamp
+  robloxUsernameLastChanged: number;
   robloxResetGranted: boolean;
   isAdmin: boolean;
   createdAt: number;
@@ -47,7 +68,7 @@ export interface GameEvent {
   createdBy: string;
   createdAt: number;
   endsAt: number;
-  participants: string[]; // user IDs or team IDs for tournaments
+  participants: string[];
   winners: string[];
   status: 'active' | 'ended' | 'cancelled';
   prize: string;
@@ -63,60 +84,32 @@ export interface LogEntry {
   timestamp: number;
 }
 
-const KEYS = {
-  USERS: 'rbx_arena_users',
-  TEAMS: 'rbx_arena_teams',
-  EVENTS: 'rbx_arena_events',
-  LOGS: 'rbx_arena_logs',
-  CURRENT_USER: 'rbx_arena_current_user',
-};
+// ─── Session (localStorage only for current user ID) ──────────
 
-function getCollection<T>(key: string): T[] {
-  const data = localStorage.getItem(key);
-  return data ? JSON.parse(data) : [];
+const SESSION_KEY = 'traxer_session_uid';
+
+export function getSessionUserId(): string | null {
+  return localStorage.getItem(SESSION_KEY);
 }
 
-function setCollection<T>(key: string, data: T[]): void {
-  localStorage.setItem(key, JSON.stringify(data));
+export function setSessionUserId(id: string): void {
+  localStorage.setItem(SESSION_KEY, id);
 }
 
-// Initialize admin account
-export function initDB(): void {
-  const users = getCollection<User>(KEYS.USERS);
-  const adminExists = users.find(u => u.username === 'admin');
-  if (!adminExists) {
-    const admin: User = {
-      id: 'admin-001',
-      username: 'admin',
-      password: '135135135',
-      robloxUsername: 'AdminUser',
-      robloxUsernameLastChanged: 0,
-      robloxResetGranted: false,
-      isAdmin: true,
-      createdAt: Date.now(),
-      fingerprint: 'admin-fp',
-      ipHash: 'admin-ip',
-      teamId: null,
-      notifications: [],
-      banned: false,
-      banReason: '',
-    };
-    users.push(admin);
-    setCollection(KEYS.USERS, users);
-  }
+export function clearSession(): void {
+  localStorage.removeItem(SESSION_KEY);
 }
 
-// Anti-bot: Generate browser fingerprint
+// ─── Anti-bot fingerprinting ───────────────────────────────────
+
 export function generateFingerprint(): string {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (ctx) {
     ctx.textBaseline = 'top';
     ctx.font = '14px Arial';
-    ctx.fillText('fingerprint', 2, 2);
+    ctx.fillText('traxer_fp', 2, 2);
   }
-  const canvasData = canvas.toDataURL();
-  
   const nav = [
     navigator.userAgent,
     navigator.language,
@@ -126,25 +119,20 @@ export function generateFingerprint(): string {
     navigator.hardwareConcurrency || 0,
     (navigator as any).deviceMemory || 0,
     navigator.platform,
+    canvas.toDataURL(),
   ].join('|');
-  
-  // Simple hash
   let hash = 0;
-  const str = canvasData + nav;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+  for (let i = 0; i < nav.length; i++) {
+    hash = ((hash << 5) - hash) + nav.charCodeAt(i);
     hash = hash & hash;
   }
   return 'fp_' + Math.abs(hash).toString(36);
 }
 
 export function generateIPHash(): string {
-  // In production, get real IP from server
   const pseudo = [
     navigator.userAgent,
-    screen.width,
-    screen.height,
+    screen.width, screen.height,
     navigator.language,
     navigator.platform,
   ].join('_');
@@ -156,304 +144,8 @@ export function generateIPHash(): string {
   return 'ip_' + Math.abs(hash).toString(36);
 }
 
-// Auth
-export function register(username: string, password: string, robloxUsername: string): { success: boolean; error?: string; user?: User } {
-  const users = getCollection<User>(KEYS.USERS);
-  const fp = generateFingerprint();
-  const ipHash = generateIPHash();
-  
-  // Check for existing account with same fingerprint or IP
-  const existingByFP = users.find(u => u.fingerprint === fp && !u.isAdmin);
-  if (existingByFP) {
-    return { success: false, error: 'Обнаружен дубликат аккаунта. Создание твинков запрещено!' };
-  }
-  
-  const existingByIP = users.find(u => u.ipHash === ipHash && !u.isAdmin);
-  if (existingByIP) {
-    return { success: false, error: 'С данного устройства уже зарегистрирован аккаунт. Мультиаккаунт запрещён!' };
-  }
-  
-  if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
-    return { success: false, error: 'Пользователь с таким именем уже существует' };
-  }
-  
-  if (users.find(u => u.robloxUsername.toLowerCase() === robloxUsername.toLowerCase())) {
-    return { success: false, error: 'Этот Roblox ник уже привязан к другому аккаунту' };
-  }
-  
-  if (username.length < 3) return { success: false, error: 'Имя пользователя минимум 3 символа' };
-  if (password.length < 6) return { success: false, error: 'Пароль минимум 6 символов' };
-  if (robloxUsername.length < 3) return { success: false, error: 'Roblox ник минимум 3 символа' };
-  
-  const newUser: User = {
-    id: uuidv4(),
-    username,
-    password,
-    robloxUsername,
-    robloxUsernameLastChanged: Date.now(),
-    robloxResetGranted: false,
-    isAdmin: false,
-    createdAt: Date.now(),
-    fingerprint: fp,
-    ipHash: ipHash,
-    teamId: null,
-    notifications: [],
-    banned: false,
-    banReason: '',
-  };
-  
-  users.push(newUser);
-  setCollection(KEYS.USERS, users);
-  addLog('REGISTER', newUser.id, newUser.username, `Новый пользователь зарегистрирован. FP: ${fp}`);
-  
-  return { success: true, user: newUser };
-}
+// ─── Duration parser ───────────────────────────────────────────
 
-export function login(username: string, password: string): { success: boolean; error?: string; user?: User } {
-  const users = getCollection<User>(KEYS.USERS);
-  const user = users.find(u => u.username === username && u.password === password);
-  
-  if (!user) return { success: false, error: 'Неверный логин или пароль' };
-  if (user.banned) return { success: false, error: `Аккаунт заблокирован: ${user.banReason}` };
-  
-  // Anti-twink: verify fingerprint for non-admins
-  if (!user.isAdmin) {
-    const fp = generateFingerprint();
-    const ipHash = generateIPHash();
-    if (user.fingerprint !== fp && user.ipHash !== ipHash) {
-      addLog('SUSPICIOUS_LOGIN', user.id, user.username, `Попытка входа с другого устройства. Expected FP: ${user.fingerprint}, Got: ${fp}`);
-      // Allow but log it
-    }
-  }
-  
-  localStorage.setItem(KEYS.CURRENT_USER, user.id);
-  addLog('LOGIN', user.id, user.username, 'Вход в систему');
-  return { success: true, user };
-}
-
-export function logout(): void {
-  const user = getCurrentUser();
-  if (user) {
-    addLog('LOGOUT', user.id, user.username, 'Выход из системы');
-  }
-  localStorage.removeItem(KEYS.CURRENT_USER);
-}
-
-export function getCurrentUser(): User | null {
-  const userId = localStorage.getItem(KEYS.CURRENT_USER);
-  if (!userId) return null;
-  const users = getCollection<User>(KEYS.USERS);
-  return users.find(u => u.id === userId) || null;
-}
-
-export function getAllUsers(): User[] {
-  return getCollection<User>(KEYS.USERS);
-}
-
-export function getUserById(id: string): User | null {
-  const users = getCollection<User>(KEYS.USERS);
-  return users.find(u => u.id === id) || null;
-}
-
-export function updateUser(userId: string, updates: Partial<User>): void {
-  const users = getCollection<User>(KEYS.USERS);
-  const idx = users.findIndex(u => u.id === userId);
-  if (idx !== -1) {
-    users[idx] = { ...users[idx], ...updates };
-    setCollection(KEYS.USERS, users);
-  }
-}
-
-// Roblox username
-export function changeRobloxUsername(userId: string, newUsername: string): { success: boolean; error?: string } {
-  const users = getCollection<User>(KEYS.USERS);
-  const user = users.find(u => u.id === userId);
-  if (!user) return { success: false, error: 'Пользователь не найден' };
-  
-  const monthMs = 30 * 24 * 60 * 60 * 1000;
-  const timeSinceChange = Date.now() - user.robloxUsernameLastChanged;
-  
-  if (timeSinceChange < monthMs && !user.robloxResetGranted) {
-    const daysLeft = Math.ceil((monthMs - timeSinceChange) / (24 * 60 * 60 * 1000));
-    return { success: false, error: `Смена ника доступна через ${daysLeft} дн.` };
-  }
-  
-  if (users.find(u => u.robloxUsername.toLowerCase() === newUsername.toLowerCase() && u.id !== userId)) {
-    return { success: false, error: 'Этот Roblox ник уже занят' };
-  }
-  
-  const idx = users.findIndex(u => u.id === userId);
-  users[idx].robloxUsername = newUsername;
-  users[idx].robloxUsernameLastChanged = Date.now();
-  users[idx].robloxResetGranted = false;
-  setCollection(KEYS.USERS, users);
-  addLog('ROBLOX_CHANGE', userId, user.username, `Смена Roblox ника на: ${newUsername}`);
-  
-  return { success: true };
-}
-
-export function grantRobloxReset(userId: string): void {
-  updateUser(userId, { robloxResetGranted: true });
-  const user = getUserById(userId);
-  if (user) {
-    addNotification(userId, {
-      id: uuidv4(),
-      type: 'roblox_reset',
-      message: 'Администратор разрешил вам сменить Roblox ник досрочно!',
-      read: false,
-      createdAt: Date.now(),
-    });
-    addLog('ADMIN_ROBLOX_RESET', 'admin', 'admin', `Сброс кулдауна Roblox ника для ${user.username}`);
-  }
-}
-
-// Notifications
-export function addNotification(userId: string, notif: Notification): void {
-  const users = getCollection<User>(KEYS.USERS);
-  const idx = users.findIndex(u => u.id === userId);
-  if (idx !== -1) {
-    users[idx].notifications.unshift(notif);
-    setCollection(KEYS.USERS, users);
-  }
-}
-
-export function markNotificationRead(userId: string, notifId: string): void {
-  const users = getCollection<User>(KEYS.USERS);
-  const idx = users.findIndex(u => u.id === userId);
-  if (idx !== -1) {
-    const nIdx = users[idx].notifications.findIndex(n => n.id === notifId);
-    if (nIdx !== -1) {
-      users[idx].notifications[nIdx].read = true;
-      setCollection(KEYS.USERS, users);
-    }
-  }
-}
-
-// Teams
-export function createTeam(name: string, ownerId: string): { success: boolean; error?: string; team?: Team } {
-  const teams = getCollection<Team>(KEYS.TEAMS);
-  const user = getUserById(ownerId);
-  
-  if (!user) return { success: false, error: 'Пользователь не найден' };
-  if (user.teamId) return { success: false, error: 'Вы уже состоите в команде' };
-  if (teams.find(t => t.name.toLowerCase() === name.toLowerCase())) {
-    return { success: false, error: 'Команда с таким названием уже существует' };
-  }
-  if (name.length < 2) return { success: false, error: 'Название команды минимум 2 символа' };
-  
-  const team: Team = {
-    id: uuidv4(),
-    name,
-    ownerId,
-    memberIds: [ownerId],
-    pendingInvites: [],
-    createdAt: Date.now(),
-  };
-  
-  teams.push(team);
-  setCollection(KEYS.TEAMS, teams);
-  updateUser(ownerId, { teamId: team.id });
-  addLog('TEAM_CREATE', ownerId, user.username, `Создана команда: ${name}`);
-  
-  return { success: true, team };
-}
-
-export function inviteToTeam(teamId: string, inviterId: string, inviteeUsername: string): { success: boolean; error?: string } {
-  const teams = getCollection<Team>(KEYS.TEAMS);
-  const team = teams.find(t => t.id === teamId);
-  if (!team) return { success: false, error: 'Команда не найдена' };
-  if (team.ownerId !== inviterId) return { success: false, error: 'Только лидер может приглашать' };
-  
-  const users = getCollection<User>(KEYS.USERS);
-  const invitee = users.find(u => u.username.toLowerCase() === inviteeUsername.toLowerCase());
-  if (!invitee) return { success: false, error: 'Пользователь не найден' };
-  if (invitee.teamId) return { success: false, error: 'Пользователь уже в команде' };
-  if (team.pendingInvites.includes(invitee.id)) return { success: false, error: 'Приглашение уже отправлено' };
-  if (team.memberIds.includes(invitee.id)) return { success: false, error: 'Уже в команде' };
-  
-  const tIdx = teams.findIndex(t => t.id === teamId);
-  teams[tIdx].pendingInvites.push(invitee.id);
-  setCollection(KEYS.TEAMS, teams);
-  
-  addNotification(invitee.id, {
-    id: uuidv4(),
-    type: 'team_invite',
-    message: `Вас приглашают в команду "${team.name}"`,
-    data: { teamId, teamName: team.name },
-    read: false,
-    createdAt: Date.now(),
-  });
-  
-  const inviter = getUserById(inviterId);
-  addLog('TEAM_INVITE', inviterId, inviter?.username || '', `Приглашение ${invitee.username} в команду ${team.name}`);
-  
-  return { success: true };
-}
-
-export function respondToTeamInvite(userId: string, teamId: string, accept: boolean): { success: boolean; error?: string } {
-  const teams = getCollection<Team>(KEYS.TEAMS);
-  const tIdx = teams.findIndex(t => t.id === teamId);
-  if (tIdx === -1) return { success: false, error: 'Команда не найдена' };
-  
-  const user = getUserById(userId);
-  if (!user) return { success: false, error: 'Пользователь не найден' };
-  
-  teams[tIdx].pendingInvites = teams[tIdx].pendingInvites.filter(id => id !== userId);
-  
-  if (accept) {
-    if (user.teamId) return { success: false, error: 'Вы уже в команде' };
-    teams[tIdx].memberIds.push(userId);
-    setCollection(KEYS.TEAMS, teams);
-    updateUser(userId, { teamId });
-    addLog('TEAM_JOIN', userId, user.username, `Вступил в команду ${teams[tIdx].name}`);
-  } else {
-    setCollection(KEYS.TEAMS, teams);
-    addLog('TEAM_DECLINE', userId, user.username, `Отклонил приглашение в ${teams[tIdx].name}`);
-  }
-  
-  return { success: true };
-}
-
-export function leaveTeam(userId: string): { success: boolean; error?: string } {
-  const user = getUserById(userId);
-  if (!user || !user.teamId) return { success: false, error: 'Вы не в команде' };
-  
-  const teams = getCollection<Team>(KEYS.TEAMS);
-  const tIdx = teams.findIndex(t => t.id === user.teamId);
-  if (tIdx === -1) return { success: false, error: 'Команда не найдена' };
-  
-  if (teams[tIdx].ownerId === userId) {
-    // Disband or transfer
-    const members = teams[tIdx].memberIds.filter(id => id !== userId);
-    if (members.length > 0) {
-      teams[tIdx].ownerId = members[0];
-      teams[tIdx].memberIds = members;
-      setCollection(KEYS.TEAMS, teams);
-    } else {
-      teams.splice(tIdx, 1);
-      setCollection(KEYS.TEAMS, teams);
-    }
-  } else {
-    teams[tIdx].memberIds = teams[tIdx].memberIds.filter(id => id !== userId);
-    setCollection(KEYS.TEAMS, teams);
-  }
-  
-  updateUser(userId, { teamId: null });
-  addLog('TEAM_LEAVE', userId, user.username, 'Покинул команду');
-  
-  return { success: true };
-}
-
-export function getTeam(teamId: string): Team | null {
-  const teams = getCollection<Team>(KEYS.TEAMS);
-  return teams.find(t => t.id === teamId) || null;
-}
-
-export function getAllTeams(): Team[] {
-  return getCollection<Team>(KEYS.TEAMS);
-}
-
-// Events
 export function parseDuration(durationStr: string): number {
   let totalMs = 0;
   const patterns: [RegExp, number][] = [
@@ -463,161 +155,611 @@ export function parseDuration(durationStr: string): number {
     [/(\d+)h/g, 60 * 60 * 1000],
     [/(\d+)m(?!o)/g, 60 * 1000],
   ];
-  
   for (const [regex, multiplier] of patterns) {
     let match;
-    while ((match = regex.exec(durationStr)) !== null) {
+    const re = new RegExp(regex.source, regex.flags);
+    while ((match = re.exec(durationStr)) !== null) {
       totalMs += parseInt(match[1]) * multiplier;
     }
   }
-  
   return totalMs;
 }
 
-export function createEvent(event: Omit<GameEvent, 'id' | 'createdAt' | 'participants' | 'winners' | 'status'>): { success: boolean; error?: string; event?: GameEvent } {
-  const newEvent: GameEvent = {
-    ...event,
-    id: uuidv4(),
-    createdAt: Date.now(),
-    participants: [],
-    winners: [],
-    status: 'active',
-  };
-  
-  const events = getCollection<GameEvent>(KEYS.EVENTS);
-  events.push(newEvent);
-  setCollection(KEYS.EVENTS, events);
-  
-  const creator = getUserById(event.createdBy);
-  addLog('EVENT_CREATE', event.createdBy, creator?.username || 'admin', `Создан ${event.type}: ${event.title}`);
-  
-  return { success: true, event: newEvent };
-}
+// ─── INIT DB (create admin if not exists) ─────────────────────
 
-export function joinEvent(eventId: string, participantId: string): { success: boolean; error?: string } {
-  const events = getCollection<GameEvent>(KEYS.EVENTS);
-  const eIdx = events.findIndex(e => e.id === eventId);
-  if (eIdx === -1) return { success: false, error: 'Событие не найдено' };
-  
-  const event = events[eIdx];
-  if (event.status !== 'active') return { success: false, error: 'Событие завершено' };
-  if (Date.now() > event.endsAt) return { success: false, error: 'Время истекло' };
-  
-  if (event.type === 'tournament' && event.tournamentMode) {
-    // For tournaments, participantId is teamId
-    const team = getTeam(participantId);
-    if (!team) return { success: false, error: 'Команда не найдена' };
-    const requiredSize = parseInt(event.tournamentMode.split('v')[0]);
-    if (team.memberIds.length < requiredSize) {
-      return { success: false, error: `Нужно ${requiredSize} игроков в команде` };
+export async function initDB(): Promise<void> {
+  try {
+    const adminRef = doc(db, 'users', 'admin-001');
+    const adminSnap = await getDoc(adminRef);
+    if (!adminSnap.exists()) {
+      const admin: User = {
+        id: 'admin-001',
+        username: 'admin',
+        password: '135135135',
+        robloxUsername: 'AdminTraxer',
+        robloxUsernameLastChanged: 0,
+        robloxResetGranted: false,
+        isAdmin: true,
+        createdAt: Date.now(),
+        fingerprint: 'admin-fp',
+        ipHash: 'admin-ip',
+        teamId: null,
+        notifications: [],
+        banned: false,
+        banReason: '',
+      };
+      await setDoc(adminRef, admin);
     }
-  }
-  
-  if (event.participants.includes(participantId)) {
-    return { success: false, error: 'Уже участвуете' };
-  }
-  
-  if (event.maxParticipants > 0 && event.participants.length >= event.maxParticipants) {
-    return { success: false, error: 'Максимум участников достигнут' };
-  }
-  
-  events[eIdx].participants.push(participantId);
-  setCollection(KEYS.EVENTS, events);
-  
-  const user = getUserById(participantId);
-  addLog('EVENT_JOIN', participantId, user?.username || participantId, `Участие в: ${event.title}`);
-  
-  return { success: true };
-}
-
-export function leaveEvent(eventId: string, participantId: string): { success: boolean; error?: string } {
-  const events = getCollection<GameEvent>(KEYS.EVENTS);
-  const eIdx = events.findIndex(e => e.id === eventId);
-  if (eIdx === -1) return { success: false, error: 'Событие не найдено' };
-  
-  events[eIdx].participants = events[eIdx].participants.filter(p => p !== participantId);
-  setCollection(KEYS.EVENTS, events);
-  
-  return { success: true };
-}
-
-export function endEvent(eventId: string, winnerIds: string[]): void {
-  const events = getCollection<GameEvent>(KEYS.EVENTS);
-  const eIdx = events.findIndex(e => e.id === eventId);
-  if (eIdx !== -1) {
-    events[eIdx].status = 'ended';
-    events[eIdx].winners = winnerIds;
-    setCollection(KEYS.EVENTS, events);
-    addLog('EVENT_END', 'admin', 'admin', `Завершён: ${events[eIdx].title}`);
+  } catch (e) {
+    console.error('initDB error:', e);
   }
 }
 
-export function cancelEvent(eventId: string): void {
-  const events = getCollection<GameEvent>(KEYS.EVENTS);
-  const eIdx = events.findIndex(e => e.id === eventId);
-  if (eIdx !== -1) {
-    events[eIdx].status = 'cancelled';
-    setCollection(KEYS.EVENTS, events);
-    addLog('EVENT_CANCEL', 'admin', 'admin', `Отменён: ${events[eIdx].title}`);
+// ─── AUTH ──────────────────────────────────────────────────────
+
+export async function register(
+  username: string,
+  password: string,
+  robloxUsername: string
+): Promise<{ success: boolean; error?: string; user?: User }> {
+  try {
+    const fp = generateFingerprint();
+    const ipHash = generateIPHash();
+
+    const usersRef = collection(db, 'users');
+
+    // Check username unique
+    const nameQ = query(usersRef, where('username', '==', username));
+    const nameSnap = await getDocs(nameQ);
+    if (!nameSnap.empty) return { success: false, error: 'Пользователь с таким именем уже существует' };
+
+    // Check roblox username unique
+    const rbxQ = query(usersRef, where('robloxUsername', '==', robloxUsername));
+    const rbxSnap = await getDocs(rbxQ);
+    if (!rbxSnap.empty) return { success: false, error: 'Этот Roblox ник уже привязан к другому аккаунту' };
+
+    // Anti-twink: fingerprint check
+    const fpQ = query(usersRef, where('fingerprint', '==', fp), where('isAdmin', '==', false));
+    const fpSnap = await getDocs(fpQ);
+    if (!fpSnap.empty) return { success: false, error: '🚫 Обнаружен дубликат аккаунта. Создание твинков запрещено!' };
+
+    // Anti-twink: IP check
+    const ipQ = query(usersRef, where('ipHash', '==', ipHash), where('isAdmin', '==', false));
+    const ipSnap = await getDocs(ipQ);
+    if (!ipSnap.empty) return { success: false, error: '🚫 С данного устройства уже зарегистрирован аккаунт. Мультиаккаунт запрещён!' };
+
+    if (username.length < 3) return { success: false, error: 'Имя пользователя минимум 3 символа' };
+    if (password.length < 6) return { success: false, error: 'Пароль минимум 6 символов' };
+    if (robloxUsername.length < 3) return { success: false, error: 'Roblox ник минимум 3 символа' };
+
+    const id = uuidv4();
+    const newUser: User = {
+      id,
+      username,
+      password,
+      robloxUsername,
+      robloxUsernameLastChanged: Date.now(),
+      robloxResetGranted: false,
+      isAdmin: false,
+      createdAt: Date.now(),
+      fingerprint: fp,
+      ipHash,
+      teamId: null,
+      notifications: [],
+      banned: false,
+      banReason: '',
+    };
+
+    await setDoc(doc(db, 'users', id), newUser);
+    await addLog('REGISTER', id, username, `Новый пользователь. FP: ${fp}`);
+    setSessionUserId(id);
+
+    return { success: true, user: newUser };
+  } catch (e: any) {
+    return { success: false, error: 'Ошибка сети: ' + (e?.message || e) };
   }
 }
 
-export function getAllEvents(): GameEvent[] {
-  return getCollection<GameEvent>(KEYS.EVENTS);
+export async function login(
+  username: string,
+  password: string
+): Promise<{ success: boolean; error?: string; user?: User }> {
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('username', '==', username), where('password', '==', password));
+    const snap = await getDocs(q);
+
+    if (snap.empty) return { success: false, error: 'Неверный логин или пароль' };
+
+    const user = snap.docs[0].data() as User;
+    if (user.banned) return { success: false, error: `Аккаунт заблокирован: ${user.banReason}` };
+
+    setSessionUserId(user.id);
+    await addLog('LOGIN', user.id, user.username, 'Вход в систему');
+    return { success: true, user };
+  } catch (e: any) {
+    return { success: false, error: 'Ошибка сети: ' + (e?.message || e) };
+  }
 }
 
-export function getEvent(eventId: string): GameEvent | null {
-  const events = getCollection<GameEvent>(KEYS.EVENTS);
-  return events.find(e => e.id === eventId) || null;
+export async function logout(): Promise<void> {
+  const uid = getSessionUserId();
+  if (uid) {
+    const user = await getUserById(uid);
+    if (user) await addLog('LOGOUT', uid, user.username, 'Выход из системы');
+  }
+  clearSession();
 }
 
-// Random winner for giveaway
-export function pickRandomWinner(eventId: string, count: number = 1): string[] {
-  const event = getEvent(eventId);
+export async function getCurrentUser(): Promise<User | null> {
+  const uid = getSessionUserId();
+  if (!uid) return null;
+  return getUserById(uid);
+}
+
+export async function getUserById(id: string): Promise<User | null> {
+  try {
+    const snap = await getDoc(doc(db, 'users', id));
+    if (!snap.exists()) return null;
+    return snap.data() as User;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAllUsers(): Promise<User[]> {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    return snap.docs.map(d => d.data() as User);
+  } catch {
+    return [];
+  }
+}
+
+export async function updateUser(userId: string, updates: Partial<User>): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'users', userId), updates as any);
+  } catch (e) {
+    console.error('updateUser error:', e);
+  }
+}
+
+// ─── ROBLOX USERNAME ───────────────────────────────────────────
+
+export async function changeRobloxUsername(
+  userId: string,
+  newUsername: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await getUserById(userId);
+    if (!user) return { success: false, error: 'Пользователь не найден' };
+
+    const monthMs = 30 * 24 * 60 * 60 * 1000;
+    const timeSinceChange = Date.now() - user.robloxUsernameLastChanged;
+
+    if (timeSinceChange < monthMs && !user.robloxResetGranted) {
+      const daysLeft = Math.ceil((monthMs - timeSinceChange) / (24 * 60 * 60 * 1000));
+      return { success: false, error: `Смена ника доступна через ${daysLeft} дн.` };
+    }
+
+    // Check uniqueness
+    const q = query(collection(db, 'users'), where('robloxUsername', '==', newUsername));
+    const snap = await getDocs(q);
+    if (!snap.empty && snap.docs[0].id !== userId) {
+      return { success: false, error: 'Этот Roblox ник уже занят' };
+    }
+
+    await updateUser(userId, {
+      robloxUsername: newUsername,
+      robloxUsernameLastChanged: Date.now(),
+      robloxResetGranted: false,
+    });
+    await addLog('ROBLOX_CHANGE', userId, user.username, `Смена Roblox ника на: ${newUsername}`);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function grantRobloxReset(userId: string): Promise<void> {
+  await updateUser(userId, { robloxResetGranted: true });
+  const user = await getUserById(userId);
+  if (user) {
+    await addNotification(userId, {
+      id: uuidv4(),
+      type: 'roblox_reset',
+      message: 'Администратор разрешил вам сменить Roblox ник досрочно!',
+      read: false,
+      createdAt: Date.now(),
+    });
+    await addLog('ADMIN_ROBLOX_RESET', 'admin-001', 'admin', `Сброс кулдауна для ${user.username}`);
+  }
+}
+
+// ─── NOTIFICATIONS ─────────────────────────────────────────────
+
+export async function addNotification(userId: string, notif: Notification): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) return;
+    const user = snap.data() as User;
+    const notifications = [notif, ...(user.notifications || [])].slice(0, 50);
+    await updateDoc(userRef, { notifications });
+  } catch (e) {
+    console.error('addNotification error:', e);
+  }
+}
+
+export async function markNotificationRead(userId: string, notifId: string): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) return;
+    const user = snap.data() as User;
+    const notifications = (user.notifications || []).map(n =>
+      n.id === notifId ? { ...n, read: true } : n
+    );
+    await updateDoc(userRef, { notifications });
+  } catch (e) {
+    console.error('markNotificationRead error:', e);
+  }
+}
+
+// ─── TEAMS ─────────────────────────────────────────────────────
+
+export async function createTeam(
+  name: string,
+  ownerId: string
+): Promise<{ success: boolean; error?: string; team?: Team }> {
+  try {
+    const user = await getUserById(ownerId);
+    if (!user) return { success: false, error: 'Пользователь не найден' };
+    if (user.teamId) return { success: false, error: 'Вы уже состоите в команде' };
+    if (name.length < 2) return { success: false, error: 'Название команды минимум 2 символа' };
+
+    const q = query(collection(db, 'teams'), where('name', '==', name));
+    const snap = await getDocs(q);
+    if (!snap.empty) return { success: false, error: 'Команда с таким названием уже существует' };
+
+    const id = uuidv4();
+    const team: Team = {
+      id,
+      name,
+      ownerId,
+      memberIds: [ownerId],
+      pendingInvites: [],
+      createdAt: Date.now(),
+    };
+
+    await setDoc(doc(db, 'teams', id), team);
+    await updateUser(ownerId, { teamId: id });
+    await addLog('TEAM_CREATE', ownerId, user.username, `Создана команда: ${name}`);
+
+    return { success: true, team };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function inviteToTeam(
+  teamId: string,
+  inviterId: string,
+  inviteeUsername: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const teamSnap = await getDoc(doc(db, 'teams', teamId));
+    if (!teamSnap.exists()) return { success: false, error: 'Команда не найдена' };
+    const team = teamSnap.data() as Team;
+
+    if (team.ownerId !== inviterId) return { success: false, error: 'Только лидер может приглашать' };
+
+    const q = query(collection(db, 'users'), where('username', '==', inviteeUsername));
+    const snap = await getDocs(q);
+    if (snap.empty) return { success: false, error: 'Пользователь не найден' };
+
+    const invitee = snap.docs[0].data() as User;
+    if (invitee.teamId) return { success: false, error: 'Пользователь уже в команде' };
+    if (team.pendingInvites.includes(invitee.id)) return { success: false, error: 'Приглашение уже отправлено' };
+    if (team.memberIds.includes(invitee.id)) return { success: false, error: 'Уже в команде' };
+
+    await updateDoc(doc(db, 'teams', teamId), {
+      pendingInvites: arrayUnion(invitee.id),
+    });
+
+    await addNotification(invitee.id, {
+      id: uuidv4(),
+      type: 'team_invite',
+      message: `Вас приглашают в команду "${team.name}"`,
+      data: { teamId, teamName: team.name },
+      read: false,
+      createdAt: Date.now(),
+    });
+
+    const inviter = await getUserById(inviterId);
+    await addLog('TEAM_INVITE', inviterId, inviter?.username || '', `Приглашение ${invitee.username} в ${team.name}`);
+
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function respondToTeamInvite(
+  userId: string,
+  teamId: string,
+  accept: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const teamRef = doc(db, 'teams', teamId);
+    const teamSnap = await getDoc(teamRef);
+    if (!teamSnap.exists()) return { success: false, error: 'Команда не найдена' };
+    const team = teamSnap.data() as Team;
+
+    const user = await getUserById(userId);
+    if (!user) return { success: false, error: 'Пользователь не найден' };
+
+    await updateDoc(teamRef, { pendingInvites: arrayRemove(userId) });
+
+    if (accept) {
+      if (user.teamId) return { success: false, error: 'Вы уже в команде' };
+      await updateDoc(teamRef, { memberIds: arrayUnion(userId) });
+      await updateUser(userId, { teamId });
+      await addLog('TEAM_JOIN', userId, user.username, `Вступил в команду ${team.name}`);
+    } else {
+      await addLog('TEAM_DECLINE', userId, user.username, `Отклонил приглашение в ${team.name}`);
+    }
+
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function leaveTeam(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await getUserById(userId);
+    if (!user || !user.teamId) return { success: false, error: 'Вы не в команде' };
+
+    const teamRef = doc(db, 'teams', user.teamId);
+    const teamSnap = await getDoc(teamRef);
+    if (!teamSnap.exists()) {
+      await updateUser(userId, { teamId: null });
+      return { success: true };
+    }
+    const team = teamSnap.data() as Team;
+
+    if (team.ownerId === userId) {
+      const members = team.memberIds.filter(id => id !== userId);
+      if (members.length > 0) {
+        await updateDoc(teamRef, { ownerId: members[0], memberIds: members });
+      } else {
+        await deleteDoc(teamRef);
+      }
+    } else {
+      await updateDoc(teamRef, { memberIds: arrayRemove(userId) });
+    }
+
+    await updateUser(userId, { teamId: null });
+    await addLog('TEAM_LEAVE', userId, user.username, 'Покинул команду');
+
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function getTeam(teamId: string): Promise<Team | null> {
+  try {
+    const snap = await getDoc(doc(db, 'teams', teamId));
+    if (!snap.exists()) return null;
+    return snap.data() as Team;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAllTeams(): Promise<Team[]> {
+  try {
+    const snap = await getDocs(collection(db, 'teams'));
+    return snap.docs.map(d => d.data() as Team);
+  } catch {
+    return [];
+  }
+}
+
+// ─── EVENTS ────────────────────────────────────────────────────
+
+export async function createEvent(
+  event: Omit<GameEvent, 'id' | 'createdAt' | 'participants' | 'winners' | 'status'>
+): Promise<{ success: boolean; error?: string; event?: GameEvent }> {
+  try {
+    const id = uuidv4();
+    const newEvent: GameEvent = {
+      ...event,
+      id,
+      createdAt: Date.now(),
+      participants: [],
+      winners: [],
+      status: 'active',
+    };
+
+    await setDoc(doc(db, 'events', id), newEvent);
+    const creator = await getUserById(event.createdBy);
+    await addLog('EVENT_CREATE', event.createdBy, creator?.username || 'admin', `Создан ${event.type}: ${event.title}`);
+
+    return { success: true, event: newEvent };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function joinEvent(
+  eventId: string,
+  participantId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    const eventSnap = await getDoc(eventRef);
+    if (!eventSnap.exists()) return { success: false, error: 'Событие не найдено' };
+
+    const event = eventSnap.data() as GameEvent;
+    if (event.status !== 'active') return { success: false, error: 'Событие завершено' };
+    if (Date.now() > event.endsAt) return { success: false, error: 'Время истекло' };
+    if (event.participants.includes(participantId)) return { success: false, error: 'Уже участвуете' };
+    if (event.maxParticipants > 0 && event.participants.length >= event.maxParticipants) {
+      return { success: false, error: 'Максимум участников достигнут' };
+    }
+
+    if (event.type === 'tournament' && event.tournamentMode) {
+      const team = await getTeam(participantId);
+      if (!team) return { success: false, error: 'Команда не найдена' };
+      const requiredSize = parseInt(event.tournamentMode.split('v')[0]);
+      if (team.memberIds.length < requiredSize) {
+        return { success: false, error: `Нужно минимум ${requiredSize} игроков в команде` };
+      }
+    }
+
+    await updateDoc(eventRef, { participants: arrayUnion(participantId) });
+
+    const user = await getUserById(participantId);
+    await addLog('EVENT_JOIN', participantId, user?.username || participantId, `Участие в: ${event.title}`);
+
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function leaveEvent(
+  eventId: string,
+  participantId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await updateDoc(doc(db, 'events', eventId), {
+      participants: arrayRemove(participantId),
+    });
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function getAllEvents(): Promise<GameEvent[]> {
+  try {
+    const snap = await getDocs(collection(db, 'events'));
+    return snap.docs.map(d => d.data() as GameEvent).sort((a, b) => b.createdAt - a.createdAt);
+  } catch {
+    return [];
+  }
+}
+
+export async function getEvent(eventId: string): Promise<GameEvent | null> {
+  try {
+    const snap = await getDoc(doc(db, 'events', eventId));
+    if (!snap.exists()) return null;
+    return snap.data() as GameEvent;
+  } catch {
+    return null;
+  }
+}
+
+export async function endEvent(eventId: string, winnerIds: string[]): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'events', eventId), { status: 'ended', winners: winnerIds });
+    const event = await getEvent(eventId);
+    await addLog('EVENT_END', 'admin-001', 'admin', `Завершён: ${event?.title}`);
+  } catch (e) {
+    console.error('endEvent error:', e);
+  }
+}
+
+export async function cancelEvent(eventId: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'events', eventId), { status: 'cancelled' });
+    const event = await getEvent(eventId);
+    await addLog('EVENT_CANCEL', 'admin-001', 'admin', `Отменён: ${event?.title}`);
+  } catch (e) {
+    console.error('cancelEvent error:', e);
+  }
+}
+
+export async function deleteEvent(eventId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'events', eventId));
+    await addLog('EVENT_DELETE', 'admin-001', 'admin', `Удалён ивент: ${eventId}`);
+  } catch (e) {
+    console.error('deleteEvent error:', e);
+  }
+}
+
+export async function pickRandomWinner(eventId: string, count: number = 1): Promise<string[]> {
+  const event = await getEvent(eventId);
   if (!event || event.participants.length === 0) return [];
-  
   const shuffled = [...event.participants].sort(() => Math.random() - 0.5);
   const winners = shuffled.slice(0, Math.min(count, shuffled.length));
-  endEvent(eventId, winners);
+  await endEvent(eventId, winners);
   return winners;
 }
 
-// Ban user
-export function banUser(userId: string, reason: string): void {
-  updateUser(userId, { banned: true, banReason: reason });
-  const user = getUserById(userId);
-  addLog('BAN', 'admin', 'admin', `Забанен ${user?.username}: ${reason}`);
+// ─── BAN ───────────────────────────────────────────────────────
+
+export async function banUser(userId: string, reason: string): Promise<void> {
+  await updateUser(userId, { banned: true, banReason: reason });
+  const user = await getUserById(userId);
+  await addLog('BAN', 'admin-001', 'admin', `Забанен ${user?.username}: ${reason}`);
 }
 
-export function unbanUser(userId: string): void {
-  updateUser(userId, { banned: false, banReason: '' });
-  const user = getUserById(userId);
-  addLog('UNBAN', 'admin', 'admin', `Разбанен ${user?.username}`);
+export async function unbanUser(userId: string): Promise<void> {
+  await updateUser(userId, { banned: false, banReason: '' });
+  const user = await getUserById(userId);
+  await addLog('UNBAN', 'admin-001', 'admin', `Разбанен ${user?.username}`);
 }
 
-// Logs
-export function addLog(action: string, userId: string, username: string, details: string): void {
-  const logs = getCollection<LogEntry>(KEYS.LOGS);
-  logs.unshift({
-    id: uuidv4(),
-    action,
-    userId,
-    username,
-    details,
-    timestamp: Date.now(),
+// ─── LOGS ──────────────────────────────────────────────────────
+
+export async function addLog(
+  action: string,
+  userId: string,
+  username: string,
+  details: string
+): Promise<void> {
+  try {
+    const id = uuidv4();
+    await setDoc(doc(db, 'logs', id), {
+      id,
+      action,
+      userId,
+      username,
+      details,
+      timestamp: Date.now(),
+    });
+  } catch (e) {
+    console.error('addLog error:', e);
+  }
+}
+
+export async function getLogs(): Promise<LogEntry[]> {
+  try {
+    const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'), limit(200));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => d.data() as LogEntry);
+  } catch {
+    return [];
+  }
+}
+
+// ─── Realtime listeners ────────────────────────────────────────
+
+export function listenEvents(callback: (events: GameEvent[]) => void): Unsubscribe {
+  return onSnapshot(collection(db, 'events'), (snap) => {
+    const events = snap.docs.map(d => d.data() as GameEvent).sort((a, b) => b.createdAt - a.createdAt);
+    callback(events);
   });
-  // Keep last 500 logs
-  if (logs.length > 500) logs.length = 500;
-  setCollection(KEYS.LOGS, logs);
 }
 
-export function getLogs(): LogEntry[] {
-  return getCollection<LogEntry>(KEYS.LOGS);
-}
-
-export function deleteEvent(eventId: string): void {
-  const events = getCollection<GameEvent>(KEYS.EVENTS);
-  const filtered = events.filter(e => e.id !== eventId);
-  setCollection(KEYS.EVENTS, filtered);
-  addLog('EVENT_DELETE', 'admin', 'admin', `Удалён ивент: ${eventId}`);
+export function listenUser(userId: string, callback: (user: User | null) => void): Unsubscribe {
+  return onSnapshot(doc(db, 'users', userId), (snap) => {
+    callback(snap.exists() ? (snap.data() as User) : null);
+  });
 }
