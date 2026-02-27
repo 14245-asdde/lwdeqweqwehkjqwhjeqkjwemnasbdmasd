@@ -59,6 +59,24 @@ export interface Team {
   createdAt: number;
 }
 
+export interface BracketMatch {
+  id: string;
+  round: number;
+  matchIndex: number;
+  team1Id: string | null;
+  team2Id: string | null;
+  winnerId: string | null;
+  team1Name: string;
+  team2Name: string;
+}
+
+export interface TournamentBracket {
+  eventId: string;
+  rounds: BracketMatch[][];
+  generated: boolean;
+  generatedAt: number;
+}
+
 export interface GameEvent {
   id: string;
   title: string;
@@ -73,6 +91,7 @@ export interface GameEvent {
   status: 'active' | 'ended' | 'cancelled';
   prize: string;
   maxParticipants: number;
+  bracket?: TournamentBracket;
 }
 
 export interface LogEntry {
@@ -762,4 +781,177 @@ export function listenUser(userId: string, callback: (user: User | null) => void
   return onSnapshot(doc(db, 'users', userId), (snap) => {
     callback(snap.exists() ? (snap.data() as User) : null);
   });
+}
+
+// ─── TOURNAMENT BRACKET ────────────────────────────────────────
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+export async function generateBracket(
+  eventId: string,
+  teamNames: Record<string, string>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    const eventSnap = await getDoc(eventRef);
+    if (!eventSnap.exists()) return { success: false, error: 'Событие не найдено' };
+    const event = eventSnap.data() as GameEvent;
+
+    const participants = shuffle(event.participants);
+    if (participants.length < 2) return { success: false, error: 'Нужно минимум 2 участника' };
+
+    // Pad to next power of 2
+    let size = 1;
+    while (size < participants.length) size *= 2;
+    const padded = [...participants];
+    while (padded.length < size) padded.push('BYE');
+
+    // Round 1
+    const rounds: BracketMatch[][] = [];
+    const round1: BracketMatch[] = [];
+    for (let i = 0; i < padded.length; i += 2) {
+      const t1 = padded[i];
+      const t2 = padded[i + 1];
+      const isBye = t2 === 'BYE';
+      round1.push({
+        id: uuidv4(),
+        round: 0,
+        matchIndex: i / 2,
+        team1Id: t1,
+        team2Id: isBye ? null : t2,
+        winnerId: isBye ? t1 : null,
+        team1Name: t1 === 'BYE' ? 'BYE' : (teamNames[t1] || t1),
+        team2Name: isBye ? 'BYE' : (teamNames[t2] || t2),
+      });
+    }
+    rounds.push(round1);
+
+    // Generate empty subsequent rounds
+    let prevCount = round1.length;
+    while (prevCount > 1) {
+      const nextCount = Math.ceil(prevCount / 2);
+      const nextRound: BracketMatch[] = [];
+      for (let i = 0; i < nextCount; i++) {
+        nextRound.push({
+          id: uuidv4(),
+          round: rounds.length,
+          matchIndex: i,
+          team1Id: null,
+          team2Id: null,
+          winnerId: null,
+          team1Name: 'TBD',
+          team2Name: 'TBD',
+        });
+      }
+      rounds.push(nextRound);
+      prevCount = nextCount;
+    }
+
+    // Auto-advance BYE winners to next round
+    for (let r = 0; r < rounds.length - 1; r++) {
+      for (let m = 0; m < rounds[r].length; m++) {
+        const match = rounds[r][m];
+        if (match.winnerId) {
+          const nextMatchIdx = Math.floor(m / 2);
+          const nextMatch = rounds[r + 1][nextMatchIdx];
+          if (m % 2 === 0) {
+            nextMatch.team1Id = match.winnerId;
+            nextMatch.team1Name = teamNames[match.winnerId] || match.winnerId;
+          } else {
+            nextMatch.team2Id = match.winnerId;
+            nextMatch.team2Name = teamNames[match.winnerId] || match.winnerId;
+          }
+        }
+      }
+    }
+
+    const bracket: TournamentBracket = {
+      eventId,
+      rounds,
+      generated: true,
+      generatedAt: Date.now(),
+    };
+
+    await updateDoc(eventRef, { bracket });
+    await addLog('BRACKET_GENERATE', 'admin-001', 'admin', `Сгенерирована сетка для: ${event.title}`);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка генерации' };
+  }
+}
+
+export async function advanceBracket(
+  eventId: string,
+  round: number,
+  matchIndex: number,
+  loserId: string,
+  teamNames: Record<string, string>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const eventRef = doc(db, 'events', eventId);
+    const eventSnap = await getDoc(eventRef);
+    if (!eventSnap.exists()) return { success: false, error: 'Событие не найдено' };
+    const event = eventSnap.data() as GameEvent;
+    if (!event.bracket) return { success: false, error: 'Сетка не создана' };
+
+    const rounds = event.bracket.rounds.map(r => r.map(m => ({ ...m })));
+    const match = rounds[round][matchIndex];
+
+    const winnerId = match.team1Id === loserId ? match.team2Id : match.team1Id;
+    if (!winnerId) return { success: false, error: 'Победитель не определён' };
+
+    match.winnerId = winnerId;
+    const winnerName = teamNames[winnerId] || winnerId;
+
+    // Advance winner to next round
+    if (round + 1 < rounds.length) {
+      const nextMatchIdx = Math.floor(matchIndex / 2);
+      const nextMatch = rounds[round + 1][nextMatchIdx];
+      if (matchIndex % 2 === 0) {
+        nextMatch.team1Id = winnerId;
+        nextMatch.team1Name = winnerName;
+      } else {
+        nextMatch.team2Id = winnerId;
+        nextMatch.team2Name = winnerName;
+      }
+    }
+
+    // Check if tournament is complete (final winner)
+    const lastRound = rounds[rounds.length - 1];
+    const finalMatch = lastRound[0];
+    let eventWinners: string[] = [];
+    let newStatus: 'active' | 'ended' | 'cancelled' = event.status;
+
+    if (finalMatch.winnerId) {
+      eventWinners = [finalMatch.winnerId];
+      newStatus = 'ended';
+    }
+
+    const updatedBracket: TournamentBracket = { ...event.bracket, rounds };
+    await updateDoc(eventRef, {
+      bracket: updatedBracket,
+      ...(eventWinners.length > 0 ? { winners: eventWinners, status: newStatus } : {}),
+    });
+
+    await addLog('BRACKET_ADVANCE', 'admin-001', 'admin', `Победитель матча ${round + 1}-${matchIndex + 1}: ${winnerName}`);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function resetBracket(eventId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await updateDoc(doc(db, 'events', eventId), { bracket: null });
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
 }

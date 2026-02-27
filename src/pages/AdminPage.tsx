@@ -47,7 +47,8 @@ export function AdminPage() {
     e.preventDefault();
     if (!user) return;
     const ms = parseDuration(form.duration);
-    if (ms <= 0) { showToast('Неверный формат времени (пример: 7d 2h 30m)', 'error'); return; }
+    if (ms <= 0) { showToast('Неверный формат времени (пример: 7d 2h 30m 1m)', 'error'); return; }
+    if (ms < 60000) { showToast('Минимальная длительность — 1 минута (1m)', 'error'); return; }
     setLoading(true);
     const res = await createEvent({
       title: form.title, description: form.description, type: form.type,

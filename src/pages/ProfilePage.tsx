@@ -32,7 +32,10 @@ export function ProfilePage() {
       setTeam(t);
     }
     const events = await getAllEvents();
-    setMyEvents(events.filter(e => e.participants.includes(user.id) || (user.teamId && e.participants.includes(user.teamId))));
+    setMyEvents(events.filter(e =>
+      e.participants.includes(user.id) ||
+      (user.teamId && e.participants.includes(user.teamId))
+    ));
   };
 
   const handleChangeRblx = async () => {
@@ -116,92 +119,277 @@ export function ProfilePage() {
   const daysLeft = canChangeRblx ? 0 : Math.ceil((monthMs - (Date.now() - user.robloxUsernameLastChanged)) / 86400000);
 
   const tabs = [
-    { id: 'profile', label: 'ПРОФИЛЬ', icon: '◈' },
-    { id: 'team', label: 'КОМАНДА', icon: '⚔' },
-    { id: 'notifications', label: 'УВЕДОМЛЕНИЯ', icon: '🔔', badge: unread },
-  ] as const;
+    { id: 'profile' as const, label: 'ПРОФИЛЬ', icon: '◈', color: '#a855f7' },
+    { id: 'team' as const, label: 'КОМАНДА', icon: '⚔', color: '#00ff8c' },
+    { id: 'notifications' as const, label: 'УВЕДОМЛЕНИЯ', icon: '🔔', color: '#f97316', badge: unread },
+  ];
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 20px 80px' }}>
-      {/* Header */}
-      <div className="panel panel-top-glow" style={{ padding: '28px 32px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-        <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'linear-gradient(135deg, rgba(124,58,255,0.3), rgba(0,255,140,0.1))', border: '2px solid rgba(124,58,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', fontFamily: 'Orbitron, monospace', fontWeight: 900, color: '#c084fc', flexShrink: 0 }}>
-          {user.username[0].toUpperCase()}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
-            <h1 className="font-orbitron" style={{ fontSize: '20px', fontWeight: 900, color: '#e2d9ff' }}>{user.username}</h1>
-            {user.isAdmin && <span className="badge badge-orange">ADMIN</span>}
-            {team && <span className="badge badge-purple">[{team.name}]</span>}
+    <div style={{ maxWidth: '960px', margin: '0 auto', padding: '40px 20px 100px' }}>
+
+      {/* ─── PROFILE HEADER ─── */}
+      <div style={{
+        position: 'relative',
+        background: 'linear-gradient(135deg, rgba(10,8,20,0.98) 0%, rgba(20,12,40,0.98) 100%)',
+        border: '1px solid rgba(124,58,255,0.25)',
+        borderRadius: '16px',
+        padding: '32px',
+        marginBottom: '8px',
+        overflow: 'hidden',
+      }}>
+        {/* Decorative glow top-right */}
+        <div style={{
+          position: 'absolute', top: '-40px', right: '-40px',
+          width: '180px', height: '180px', borderRadius: '50%',
+          background: 'rgba(124,58,255,0.12)', filter: 'blur(50px)', pointerEvents: 'none',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '-30px', left: '10%',
+          width: '120px', height: '120px', borderRadius: '50%',
+          background: 'rgba(0,255,140,0.05)', filter: 'blur(40px)', pointerEvents: 'none',
+        }} />
+
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+          {/* Avatar */}
+          <div style={{
+            width: '80px', height: '80px', borderRadius: '14px', flexShrink: 0,
+            background: 'linear-gradient(135deg, rgba(124,58,255,0.4) 0%, rgba(0,255,140,0.15) 100%)',
+            border: '2px solid rgba(168,85,247,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '32px', fontFamily: 'Orbitron, monospace', fontWeight: 900, color: '#e2d9ff',
+            boxShadow: '0 0 30px rgba(124,58,255,0.2)',
+          }}>
+            {user.username[0].toUpperCase()}
           </div>
-          <div style={{ fontSize: '15px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif' }}>
-            Roblox: <span style={{ color: '#00ff8c', fontWeight: 600 }}>{user.robloxUsername}</span>
-          </div>
-          <div style={{ fontSize: '13px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif', marginTop: '3px' }}>
-            Участий в ивентах: <span style={{ color: '#a855f7' }}>{myEvents.length}</span>
+
+          {/* Info */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
+              <h1 style={{
+                fontSize: '24px', fontWeight: 900, color: '#e2d9ff',
+                fontFamily: 'Orbitron, monospace', letterSpacing: '0.05em', margin: 0,
+              }}>{user.username}</h1>
+              {user.isAdmin && (
+                <span style={{
+                  padding: '3px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                  background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.4)',
+                  color: '#f97316', fontFamily: 'Orbitron, monospace', letterSpacing: '0.08em',
+                }}>ADMIN</span>
+              )}
+              {team && (
+                <span style={{
+                  padding: '3px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                  background: 'rgba(124,58,255,0.15)', border: '1px solid rgba(124,58,255,0.4)',
+                  color: '#c084fc', fontFamily: 'Orbitron, monospace',
+                }}>[{team.name}]</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif' }}>
+                🎮 Roblox: <span style={{ color: '#00ff8c', fontWeight: 700, fontSize: '16px' }}>{user.robloxUsername}</span>
+              </div>
+              <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif' }}>
+                📋 Ивентов: <span style={{ color: '#a855f7', fontWeight: 700 }}>{myEvents.length}</span>
+              </div>
+              <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif' }}>
+                🔔 Уведомлений: <span style={{ color: unread > 0 ? '#f97316' : 'rgba(200,180,255,0.4)', fontWeight: 700 }}>{unread}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className={activeTab === t.id ? 'btn-primary' : 'btn-secondary'}
-            style={{ padding: '10px 20px', fontSize: '12px', position: 'relative' }}>
-            {t.icon} {t.label}
-            {'badge' in t && t.badge > 0 && (
-              <span style={{ position: 'absolute', top: '-6px', right: '-6px', background: '#ef4444', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Orbitron, monospace' }}>{t.badge}</span>
-            )}
-          </button>
-        ))}
+      {/* ─── TABS ROW ─── */}
+      <div style={{ display: 'flex', gap: '2px', marginBottom: '20px', marginTop: '2px' }}>
+        {tabs.map((t) => {
+          const isActive = activeTab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              style={{
+                flex: 1,
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '14px 10px',
+                border: 'none',
+                borderRadius: t.id === 'profile' ? '0 0 0 12px' : t.id === 'notifications' ? '0 0 12px 0' : '0',
+                cursor: 'pointer',
+                fontFamily: 'Orbitron, monospace',
+                fontWeight: 700,
+                fontSize: '12px',
+                letterSpacing: '0.08em',
+                transition: 'all 0.25s ease',
+                background: isActive
+                  ? `linear-gradient(135deg, ${t.color}22, ${t.color}10)`
+                  : 'rgba(10,8,20,0.95)',
+                color: isActive ? t.color : 'rgba(200,180,255,0.35)',
+                borderTop: isActive ? `2px solid ${t.color}` : '2px solid rgba(124,58,255,0.1)',
+                borderLeft: '1px solid rgba(124,58,255,0.1)',
+                borderRight: '1px solid rgba(124,58,255,0.1)',
+                borderBottom: '1px solid rgba(124,58,255,0.1)',
+                boxShadow: isActive ? `0 0 20px ${t.color}20, inset 0 0 20px ${t.color}05` : 'none',
+              }}
+            >
+              <span style={{ fontSize: '16px' }}>{t.icon}</span>
+              <span>{t.label}</span>
+              {'badge' in t && (t.badge as number) > 0 && (
+                <span style={{
+                  position: 'absolute', top: '8px', right: '8px',
+                  background: '#ef4444', color: '#fff', borderRadius: '50%',
+                  width: '18px', height: '18px', fontSize: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'Orbitron, monospace', fontWeight: 900,
+                  boxShadow: '0 0 8px rgba(239,68,68,0.6)',
+                }}>{t.badge}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
+
+      {/* ─── TAB CONTENT ─── */}
 
       {/* PROFILE TAB */}
       {activeTab === 'profile' && (
-        <div style={{ display: 'grid', gap: '20px' }}>
-          {/* Roblox username */}
-          <div className="panel" style={{ padding: '24px' }}>
-            <h3 className="font-orbitron" style={{ fontSize: '13px', color: '#00ff8c', letterSpacing: '0.1em', marginBottom: '18px' }}>🎮 ROBLOX НИК</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', padding: '12px 16px', background: 'rgba(0,255,140,0.05)', border: '1px solid rgba(0,255,140,0.15)', borderRadius: '8px' }}>
+        <div style={{ display: 'grid', gap: '16px', animation: 'fadeInUp 0.3s ease' }}>
+
+          {/* Roblox nick card */}
+          <div style={{
+            background: 'rgba(10,8,20,0.97)',
+            border: '1px solid rgba(0,255,140,0.15)',
+            borderLeft: '4px solid #00ff8c',
+            borderRadius: '12px',
+            padding: '24px 28px',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            <div style={{ position: 'absolute', top: 0, right: 0, width: '120px', height: '120px', background: 'radial-gradient(circle, rgba(0,255,140,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
               <span style={{ fontSize: '20px' }}>🎮</span>
-              <span style={{ fontSize: '18px', color: '#00ff8c', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{user.robloxUsername}</span>
+              <h3 style={{ margin: 0, fontSize: '13px', color: '#00ff8c', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', fontWeight: 700 }}>ROBLOX НИК</h3>
             </div>
+
+            {/* Current nick display */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '12px',
+              padding: '14px 18px', marginBottom: '16px',
+              background: 'rgba(0,255,140,0.05)',
+              border: '1px solid rgba(0,255,140,0.2)',
+              borderRadius: '10px',
+            }}>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00ff8c', boxShadow: '0 0 8px #00ff8c', flexShrink: 0 }} />
+              <span style={{ fontSize: '20px', color: '#00ff8c', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700, letterSpacing: '0.05em' }}>{user.robloxUsername}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'rgba(0,255,140,0.4)', fontFamily: 'Orbitron, monospace' }}>АКТИВНЫЙ НИК</span>
+            </div>
+
             {canChangeRblx ? (
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <input className="input-field" style={{ flex: 1 }} placeholder="Новый Roblox ник"
-                  value={newRblx} onChange={e => setNewRblx(e.target.value)} />
-                <button className="btn-primary" onClick={handleChangeRblx} disabled={loading || !newRblx.trim()} style={{ padding: '10px 20px', fontSize: '13px' }}>
-                  {loading ? <span className="spinner" /> : 'ИЗМЕНИТЬ'}
-                </button>
+              <div>
+                <div style={{ fontSize: '12px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.08em', marginBottom: '10px' }}>НОВЫЙ НИК</div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <input
+                    className="input-field"
+                    style={{ flex: 1, minWidth: '160px' }}
+                    placeholder="Введите новый Roblox ник..."
+                    value={newRblx}
+                    onChange={e => setNewRblx(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleChangeRblx()}
+                  />
+                  <button
+                    onClick={handleChangeRblx}
+                    disabled={loading || !newRblx.trim()}
+                    style={{
+                      padding: '12px 24px', fontSize: '13px', fontWeight: 700,
+                      fontFamily: 'Orbitron, monospace', letterSpacing: '0.08em',
+                      background: 'linear-gradient(135deg, rgba(0,255,140,0.2), rgba(0,255,140,0.1))',
+                      border: '1px solid rgba(0,255,140,0.4)', color: '#00ff8c',
+                      borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s',
+                      opacity: loading || !newRblx.trim() ? 0.5 : 1,
+                    }}
+                  >
+                    {loading ? '...' : 'ИЗМЕНИТЬ'}
+                  </button>
+                </div>
               </div>
             ) : (
-              <div style={{ padding: '10px 14px', background: 'rgba(249,115,22,0.07)', border: '1px solid rgba(249,115,22,0.2)', borderRadius: '8px', fontSize: '14px', color: 'rgba(249,115,22,0.7)', fontFamily: 'Rajdhani, sans-serif' }}>
-                ⏰ Смена ника доступна через <strong style={{ color: '#f97316' }}>{daysLeft} дн.</strong> (раз в месяц)
+              <div style={{
+                padding: '12px 16px',
+                background: 'rgba(249,115,22,0.07)',
+                border: '1px solid rgba(249,115,22,0.2)',
+                borderRadius: '8px',
+                fontSize: '14px', color: 'rgba(249,115,22,0.8)',
+                fontFamily: 'Rajdhani, sans-serif',
+                display: 'flex', alignItems: 'center', gap: '10px',
+              }}>
+                <span style={{ fontSize: '18px' }}>⏰</span>
+                <span>Смена ника доступна через <strong style={{ color: '#f97316', fontSize: '16px' }}>{daysLeft} дн.</strong> — раз в месяц</span>
               </div>
             )}
           </div>
 
-          {/* My events */}
-          <div className="panel" style={{ padding: '24px' }}>
-            <h3 className="font-orbitron" style={{ fontSize: '13px', color: '#a855f7', letterSpacing: '0.1em', marginBottom: '18px' }}>📋 МОИ ИВЕНТЫ</h3>
+          {/* My events card */}
+          <div style={{
+            background: 'rgba(10,8,20,0.97)',
+            border: '1px solid rgba(124,58,255,0.15)',
+            borderLeft: '4px solid #a855f7',
+            borderRadius: '12px',
+            padding: '24px 28px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+              <span style={{ fontSize: '20px' }}>📋</span>
+              <h3 style={{ margin: 0, fontSize: '13px', color: '#a855f7', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', fontWeight: 700 }}>МОИ ИВЕНТЫ</h3>
+              <span style={{
+                marginLeft: 'auto', padding: '2px 10px', borderRadius: '20px',
+                background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)',
+                fontSize: '12px', color: '#a855f7', fontFamily: 'Orbitron, monospace',
+              }}>{myEvents.length}</span>
+            </div>
+
             {myEvents.length === 0 ? (
-              <p style={{ fontSize: '15px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif', textAlign: 'center', padding: '20px 0' }}>Вы ещё не участвуете ни в одном ивенте</p>
+              <div style={{ textAlign: 'center', padding: '30px 0', color: 'rgba(200,180,255,0.25)', fontFamily: 'Rajdhani, sans-serif', fontSize: '15px' }}>
+                <div style={{ fontSize: '32px', marginBottom: '8px' }}>📭</div>
+                Вы ещё не участвуете ни в одном ивенте
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {myEvents.map(e => (
-                  <div key={e.id} onClick={() => navigate('event-detail', { eventId: e.id })}
-                    style={{ padding: '12px 16px', background: 'rgba(124,58,255,0.06)', border: '1px solid rgba(124,58,255,0.15)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', transition: 'all 0.2s' }}
-                    onMouseEnter={el => (el.currentTarget.style.borderColor = 'rgba(168,85,247,0.4)')}
-                    onMouseLeave={el => (el.currentTarget.style.borderColor = 'rgba(124,58,255,0.15)')}>
+                  <div
+                    key={e.id}
+                    onClick={() => navigate('event-detail', { eventId: e.id })}
+                    style={{
+                      padding: '14px 18px',
+                      background: 'rgba(124,58,255,0.05)',
+                      border: '1px solid rgba(124,58,255,0.12)',
+                      borderRadius: '10px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center',
+                      justifyContent: 'space-between', gap: '10px',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={el => {
+                      el.currentTarget.style.borderColor = 'rgba(168,85,247,0.35)';
+                      el.currentTarget.style.background = 'rgba(124,58,255,0.1)';
+                    }}
+                    onMouseLeave={el => {
+                      el.currentTarget.style.borderColor = 'rgba(124,58,255,0.12)';
+                      el.currentTarget.style.background = 'rgba(124,58,255,0.05)';
+                    }}
+                  >
                     <div>
-                      <div className="font-orbitron" style={{ fontSize: '13px', color: '#c084fc', marginBottom: '3px' }}>{e.title}</div>
+                      <div style={{ fontSize: '14px', color: '#c084fc', fontFamily: 'Orbitron, monospace', fontWeight: 700, marginBottom: '3px' }}>{e.title}</div>
                       <div style={{ fontSize: '13px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Rajdhani, sans-serif' }}>
-                        {e.type === 'giveaway' ? 'Розыгрыш' : e.type === 'tournament' ? 'Турнир' : 'Ивент'}
+                        {e.type === 'giveaway' ? '🎁 Розыгрыш' : e.type === 'tournament' ? '⚔ Турнир' : '🎮 Ивент'}
                       </div>
                     </div>
-                    <span className={`badge ${e.status === 'active' ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '11px', flexShrink: 0 }}>
-                      {e.status === 'active' ? 'LIVE' : e.status === 'ended' ? 'ENDED' : 'CANCELLED'}
+                    <span style={{
+                      padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                      fontFamily: 'Orbitron, monospace', flexShrink: 0,
+                      background: e.status === 'active' ? 'rgba(0,255,140,0.12)' : 'rgba(239,68,68,0.12)',
+                      border: `1px solid ${e.status === 'active' ? 'rgba(0,255,140,0.4)' : 'rgba(239,68,68,0.4)'}`,
+                      color: e.status === 'active' ? '#00ff8c' : '#ef4444',
+                    }}>
+                      {e.status === 'active' ? '● LIVE' : e.status === 'ended' ? 'ENDED' : 'CANCELLED'}
                     </span>
                   </div>
                 ))}
@@ -213,98 +401,232 @@ export function ProfilePage() {
 
       {/* TEAM TAB */}
       {activeTab === 'team' && (
-        <div style={{ display: 'grid', gap: '20px' }}>
+        <div style={{ display: 'grid', gap: '16px', animation: 'fadeInUp 0.3s ease' }}>
           {!team ? (
-            <div className="panel" style={{ padding: '28px' }}>
-              <h3 className="font-orbitron" style={{ fontSize: '13px', color: '#00ff8c', letterSpacing: '0.1em', marginBottom: '20px' }}>⚔ СОЗДАТЬ КОМАНДУ</h3>
+            <div style={{
+              background: 'rgba(10,8,20,0.97)',
+              border: '1px solid rgba(0,255,140,0.15)',
+              borderLeft: '4px solid #00ff8c',
+              borderRadius: '12px', padding: '28px',
+              position: 'relative', overflow: 'hidden',
+            }}>
+              <div style={{ position: 'absolute', top: 0, right: 0, width: '150px', height: '150px', background: 'radial-gradient(circle, rgba(0,255,140,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '22px' }}>⚔</span>
+                <h3 style={{ margin: 0, fontSize: '14px', color: '#00ff8c', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', fontWeight: 700 }}>СОЗДАТЬ КОМАНДУ</h3>
+              </div>
+              <p style={{ color: 'rgba(200,180,255,0.4)', fontFamily: 'Rajdhani, sans-serif', fontSize: '15px', marginBottom: '20px' }}>
+                Создайте команду для участия в турнирах
+              </p>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <input className="input-field" style={{ flex: 1 }} placeholder="Название команды"
-                  value={teamName} onChange={e => setTeamName(e.target.value)} />
-                <button className="btn-primary" onClick={handleCreateTeam} disabled={loading || !teamName.trim()} style={{ padding: '10px 20px', fontSize: '13px' }}>
-                  {loading ? <span className="spinner" /> : 'СОЗДАТЬ'}
+                <input
+                  className="input-field"
+                  style={{ flex: 1, minWidth: '160px' }}
+                  placeholder="Название команды..."
+                  value={teamName}
+                  onChange={e => setTeamName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleCreateTeam()}
+                />
+                <button
+                  onClick={handleCreateTeam}
+                  disabled={loading || !teamName.trim()}
+                  style={{
+                    padding: '12px 24px', fontSize: '13px', fontWeight: 700,
+                    fontFamily: 'Orbitron, monospace', letterSpacing: '0.08em',
+                    background: 'linear-gradient(135deg, rgba(0,255,140,0.2), rgba(0,255,140,0.1))',
+                    border: '1px solid rgba(0,255,140,0.4)', color: '#00ff8c',
+                    borderRadius: '8px', cursor: 'pointer',
+                    opacity: loading || !teamName.trim() ? 0.5 : 1, transition: 'all 0.2s',
+                  }}
+                >
+                  {loading ? '...' : '⚔ СОЗДАТЬ'}
                 </button>
               </div>
             </div>
           ) : (
-            <div className="panel panel-top-glow" style={{ padding: '28px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', flexWrap: 'wrap', gap: '10px' }}>
-                <div>
-                  <h3 className="font-orbitron" style={{ fontSize: '18px', color: '#c084fc', marginBottom: '5px' }}>⚔ {team.name}</h3>
-                  <div style={{ fontSize: '13px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Rajdhani, sans-serif' }}>
-                    {team.ownerId === user.id ? '👑 Вы лидер' : '👤 Вы участник'} · {team.memberIds.length} чел.
-                  </div>
-                </div>
-                <button className="btn-secondary" onClick={handleLeaveTeam} disabled={loading}
-                  style={{ padding: '8px 16px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.4)', color: '#ef4444' }}>
-                  {loading ? <span className="spinner" /> : '✕ ПОКИНУТЬ'}
-                </button>
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.1em', marginBottom: '10px' }}>УЧАСТНИКИ</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {team.memberIds.map((mid, i) => (
-                    <div key={i} style={{ padding: '6px 12px', background: 'rgba(124,58,255,0.1)', border: '1px solid rgba(124,58,255,0.2)', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {mid === team.ownerId && <span style={{ fontSize: '12px' }}>👑</span>}
-                      <span style={{ fontSize: '14px', color: '#c084fc', fontFamily: 'Rajdhani, sans-serif' }}>{mid === user.id ? user.username : mid.slice(0,8)}</span>
+            <>
+              {/* Team header card */}
+              <div style={{
+                background: 'rgba(10,8,20,0.97)',
+                border: '1px solid rgba(124,58,255,0.25)',
+                borderLeft: '4px solid #a855f7',
+                borderRadius: '12px', padding: '24px 28px',
+                position: 'relative', overflow: 'hidden',
+              }}>
+                <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '140px', height: '140px', background: 'radial-gradient(circle, rgba(168,85,247,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '22px' }}>⚔</span>
+                      <h3 style={{ margin: 0, fontSize: '20px', color: '#c084fc', fontFamily: 'Orbitron, monospace', fontWeight: 900 }}>{team.name}</h3>
                     </div>
-                  ))}
+                    <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Rajdhani, sans-serif', paddingLeft: '32px' }}>
+                      {team.ownerId === user.id ? '👑 Вы лидер команды' : '👤 Вы участник'} · <span style={{ color: '#a855f7' }}>{team.memberIds.length} чел.</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleLeaveTeam}
+                    disabled={loading}
+                    style={{
+                      padding: '10px 18px', fontSize: '12px', fontWeight: 700,
+                      fontFamily: 'Orbitron, monospace', letterSpacing: '0.06em',
+                      background: 'rgba(239,68,68,0.08)',
+                      border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444',
+                      borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s',
+                    }}
+                  >
+                    {loading ? '...' : '✕ ПОКИНУТЬ'}
+                  </button>
                 </div>
-              </div>
 
-              {team.ownerId === user.id && (
-                <div>
-                  <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.1em', marginBottom: '10px' }}>ПРИГЛАСИТЬ ИГРОКА</div>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <input className="input-field" style={{ flex: 1 }} placeholder="Логин пользователя"
-                      value={inviteUsername} onChange={e => setInviteUsername(e.target.value)} />
-                    <button className="btn-primary" onClick={handleInvite} disabled={loading || !inviteUsername.trim()} style={{ padding: '10px 20px', fontSize: '13px' }}>
-                      {loading ? <span className="spinner" /> : 'ПРИГЛАСИТЬ'}
-                    </button>
+                {/* Members */}
+                <div style={{ marginBottom: team.ownerId === user.id ? '20px' : '0' }}>
+                  <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', marginBottom: '12px' }}>СОСТАВ КОМАНДЫ</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {team.memberIds.map((mid, i) => (
+                      <div key={i} style={{
+                        padding: '8px 14px',
+                        background: mid === user.id ? 'rgba(168,85,247,0.12)' : 'rgba(124,58,255,0.07)',
+                        border: `1px solid ${mid === user.id ? 'rgba(168,85,247,0.35)' : 'rgba(124,58,255,0.15)'}`,
+                        borderRadius: '8px',
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                      }}>
+                        {mid === team.ownerId && <span style={{ fontSize: '14px' }}>👑</span>}
+                        <span style={{ fontSize: '15px', color: mid === user.id ? '#c084fc' : 'rgba(200,180,255,0.6)', fontFamily: 'Rajdhani, sans-serif', fontWeight: 600 }}>
+                          {mid === user.id ? user.username : mid.slice(0, 8) + '...'}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
+
+                {/* Invite — only owner */}
+                {team.ownerId === user.id && (
+                  <div>
+                    <div style={{ height: '1px', background: 'rgba(124,58,255,0.1)', marginBottom: '18px' }} />
+                    <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', marginBottom: '12px' }}>ПРИГЛАСИТЬ ИГРОКА</div>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <input
+                        className="input-field"
+                        style={{ flex: 1, minWidth: '160px' }}
+                        placeholder="Логин пользователя сайта..."
+                        value={inviteUsername}
+                        onChange={e => setInviteUsername(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleInvite()}
+                      />
+                      <button
+                        onClick={handleInvite}
+                        disabled={loading || !inviteUsername.trim()}
+                        style={{
+                          padding: '12px 24px', fontSize: '13px', fontWeight: 700,
+                          fontFamily: 'Orbitron, monospace', letterSpacing: '0.06em',
+                          background: 'linear-gradient(135deg, rgba(124,58,255,0.2), rgba(124,58,255,0.1))',
+                          border: '1px solid rgba(124,58,255,0.4)', color: '#c084fc',
+                          borderRadius: '8px', cursor: 'pointer',
+                          opacity: loading || !inviteUsername.trim() ? 0.5 : 1, transition: 'all 0.2s',
+                        }}
+                      >
+                        {loading ? '...' : '+ ПРИГЛАСИТЬ'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
 
       {/* NOTIFICATIONS TAB */}
       {activeTab === 'notifications' && (
-        <div className="panel" style={{ padding: '24px' }}>
-          <h3 className="font-orbitron" style={{ fontSize: '13px', color: '#a855f7', letterSpacing: '0.1em', marginBottom: '18px' }}>
-            🔔 УВЕДОМЛЕНИЯ {unread > 0 && <span className="badge badge-red" style={{ marginLeft: '8px' }}>{unread} новых</span>}
-          </h3>
-          {(user.notifications || []).length === 0 ? (
-            <p style={{ fontSize: '15px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif', textAlign: 'center', padding: '30px 0' }}>Нет уведомлений</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {(user.notifications || []).map(notif => (
-                <div key={notif.id} style={{ padding: '16px', background: notif.read ? 'rgba(124,58,255,0.04)' : 'rgba(124,58,255,0.1)', border: `1px solid ${notif.read ? 'rgba(124,58,255,0.1)' : 'rgba(168,85,247,0.3)'}`, borderRadius: '10px', transition: 'all 0.2s' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '15px', color: notif.read ? 'rgba(200,180,255,0.5)' : '#c084fc', fontFamily: 'Rajdhani, sans-serif', marginBottom: '4px' }}>
-                        {notif.type === 'team_invite' ? '⚔ ' : notif.type === 'roblox_reset' ? '🎮 ' : '🔔 '}
-                        {notif.message}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'rgba(200,180,255,0.3)', fontFamily: 'Rajdhani, sans-serif' }}>
-                        {new Date(notif.createdAt).toLocaleString('ru')}
-                      </div>
-                    </div>
-                    {notif.type === 'team_invite' && !notif.read && (
-                      <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                        <button className="btn-primary" onClick={() => handleNotifResponse(notif, true)} style={{ padding: '6px 14px', fontSize: '12px' }}>✓ ПРИНЯТЬ</button>
-                        <button className="btn-secondary" onClick={() => handleNotifResponse(notif, false)} style={{ padding: '6px 14px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.4)', color: '#ef4444' }}>✕</button>
-                      </div>
-                    )}
-                    {notif.type !== 'team_invite' && !notif.read && (
-                      <button className="btn-secondary" onClick={() => handleNotifResponse(notif, false)} style={{ padding: '5px 12px', fontSize: '11px', flexShrink: 0 }}>✓ ПРОЧИТАНО</button>
-                    )}
-                  </div>
-                </div>
-              ))}
+        <div style={{ animation: 'fadeInUp 0.3s ease' }}>
+          <div style={{
+            background: 'rgba(10,8,20,0.97)',
+            border: '1px solid rgba(249,115,22,0.15)',
+            borderLeft: '4px solid #f97316',
+            borderRadius: '12px', padding: '24px 28px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+              <span style={{ fontSize: '20px' }}>🔔</span>
+              <h3 style={{ margin: 0, fontSize: '13px', color: '#f97316', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', fontWeight: 700 }}>УВЕДОМЛЕНИЯ</h3>
+              {unread > 0 && (
+                <span style={{
+                  padding: '2px 10px', borderRadius: '20px',
+                  background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+                  fontSize: '12px', color: '#ef4444', fontFamily: 'Orbitron, monospace',
+                }}>{unread} новых</span>
+              )}
             </div>
-          )}
+
+            {(user.notifications || []).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'rgba(200,180,255,0.25)', fontFamily: 'Rajdhani, sans-serif', fontSize: '16px' }}>
+                <div style={{ fontSize: '36px', marginBottom: '10px' }}>🔕</div>
+                Нет уведомлений
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {(user.notifications || []).map(notif => (
+                  <div
+                    key={notif.id}
+                    style={{
+                      padding: '16px 18px',
+                      background: notif.read ? 'rgba(124,58,255,0.03)' : 'rgba(124,58,255,0.08)',
+                      border: `1px solid ${notif.read ? 'rgba(124,58,255,0.08)' : 'rgba(168,85,247,0.25)'}`,
+                      borderRadius: '10px', transition: 'all 0.2s',
+                      borderLeft: notif.read ? '3px solid rgba(124,58,255,0.15)' : '3px solid #a855f7',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '15px', color: notif.read ? 'rgba(200,180,255,0.4)' : '#c084fc', fontFamily: 'Rajdhani, sans-serif', marginBottom: '5px', lineHeight: 1.4 }}>
+                          {notif.type === 'team_invite' ? '⚔ ' : notif.type === 'roblox_reset' ? '🎮 ' : '🔔 '}
+                          {notif.message}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'rgba(200,180,255,0.25)', fontFamily: 'Rajdhani, sans-serif' }}>
+                          {new Date(notif.createdAt).toLocaleString('ru')}
+                        </div>
+                      </div>
+                      {notif.type === 'team_invite' && !notif.read ? (
+                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                          <button
+                            onClick={() => handleNotifResponse(notif, true)}
+                            style={{
+                              padding: '8px 16px', fontSize: '12px', fontWeight: 700,
+                              fontFamily: 'Orbitron, monospace',
+                              background: 'rgba(0,255,140,0.12)',
+                              border: '1px solid rgba(0,255,140,0.4)', color: '#00ff8c',
+                              borderRadius: '6px', cursor: 'pointer',
+                            }}
+                          >✓ ПРИНЯТЬ</button>
+                          <button
+                            onClick={() => handleNotifResponse(notif, false)}
+                            style={{
+                              padding: '8px 14px', fontSize: '12px', fontWeight: 700,
+                              fontFamily: 'Orbitron, monospace',
+                              background: 'rgba(239,68,68,0.08)',
+                              border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444',
+                              borderRadius: '6px', cursor: 'pointer',
+                            }}
+                          >✕</button>
+                        </div>
+                      ) : !notif.read ? (
+                        <button
+                          onClick={() => handleNotifResponse(notif, false)}
+                          style={{
+                            padding: '6px 14px', fontSize: '11px', fontWeight: 700,
+                            fontFamily: 'Orbitron, monospace',
+                            background: 'rgba(124,58,255,0.1)',
+                            border: '1px solid rgba(124,58,255,0.25)', color: '#a855f7',
+                            borderRadius: '6px', cursor: 'pointer', flexShrink: 0,
+                          }}
+                        >✓ ПРОЧИТАНО</button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../App';
-import { listenEvents, type GameEvent } from '../store/db';
+import { listenEvents, getAllUsers, type GameEvent, type User } from '../store/db';
 
 function Countdown({ endsAt }: { endsAt: number }) {
   const [timeLeft, setTimeLeft] = useState(endsAt - Date.now());
@@ -60,10 +60,198 @@ function EventCard({ event, onClick }: { event: GameEvent; onClick: () => void }
   );
 }
 
+// ─── Winners Carousel ─────────────────────────────────────────────────────────
+interface WinnerCard {
+  event: GameEvent;
+  winnerNames: string[];
+}
+
+function WinnersCarousel({ cards }: { cards: WinnerCard[] }) {
+  const [current, setCurrent] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const goTo = (idx: number) => {
+    if (animating || idx === current) return;
+    setAnimating(true);
+    setTimeout(() => {
+      setCurrent(idx);
+      setAnimating(false);
+    }, 300);
+  };
+
+  useEffect(() => {
+    if (cards.length <= 1) return;
+    timerRef.current = setInterval(() => {
+      setAnimating(true);
+      setTimeout(() => {
+        setCurrent(p => (p + 1) % cards.length);
+        setAnimating(false);
+      }, 300);
+    }, 4000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [cards.length]);
+
+  if (cards.length === 0) return null;
+
+  const card = cards[current];
+  const typeColors: Record<string, { color: string; label: string; icon: string }> = {
+    giveaway: { color: '#a855f7', label: 'РОЗЫГРЫШ', icon: '🎁' },
+    tournament: { color: '#f97316', label: 'ТУРНИР', icon: '⚔️' },
+    event: { color: '#06b6d4', label: 'ИВЕНТ', icon: '🎮' },
+  };
+  const tc = typeColors[card.event.type] || typeColors.event;
+  const endDate = new Date(card.event.endsAt).toLocaleDateString('ru', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {/* Main winner card */}
+      <div
+        style={{
+          opacity: animating ? 0 : 1,
+          transform: animating ? 'translateY(12px) scale(0.98)' : 'translateY(0) scale(1)',
+          transition: 'all 0.3s ease',
+          background: 'rgba(10,7,25,0.95)',
+          border: `1px solid ${tc.color}30`,
+          borderRadius: '16px',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        {/* Top stripe */}
+        <div style={{ height: '3px', background: `linear-gradient(90deg, ${tc.color}, transparent)` }} />
+
+        {/* Glow */}
+        <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '150px', height: '150px', borderRadius: '50%', background: `${tc.color}08`, filter: 'blur(40px)', pointerEvents: 'none' }} />
+
+        <div style={{ padding: '28px 32px' }}>
+          {/* Header row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '22px' }}>{tc.icon}</span>
+              <div>
+                <span className="font-orbitron" style={{ fontSize: '10px', letterSpacing: '0.15em', color: tc.color, display: 'block', marginBottom: '2px' }}>{tc.label}</span>
+                <span className="font-orbitron" style={{ fontSize: '16px', fontWeight: 700, color: '#e2d9ff' }}>{card.event.title}</span>
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif', marginBottom: '2px' }}>ЗАВЕРШЁН</div>
+              <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.6)', fontFamily: 'Rajdhani, sans-serif' }}>{endDate}</div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ height: '1px', background: `linear-gradient(90deg, ${tc.color}30, transparent)`, marginBottom: '20px' }} />
+
+          {/* Winners */}
+          <div>
+            <div style={{ fontSize: '11px', fontFamily: 'Orbitron, monospace', color: 'rgba(200,180,255,0.35)', letterSpacing: '0.15em', marginBottom: '12px' }}>
+              🏆 {card.event.type === 'tournament' ? 'ПОБЕДИВШАЯ КОМАНДА' : card.winnerNames.length > 1 ? 'ПОБЕДИТЕЛИ' : 'ПОБЕДИТЕЛЬ'}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+              {card.winnerNames.map((name, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 16px',
+                  background: `${tc.color}10`,
+                  border: `1px solid ${tc.color}35`,
+                  borderRadius: '10px',
+                  flex: '1 1 160px',
+                }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '50%',
+                    background: `linear-gradient(135deg, ${tc.color}30, ${tc.color}10)`,
+                    border: `1px solid ${tc.color}50`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '15px', fontFamily: 'Orbitron, monospace', fontWeight: 900,
+                    color: tc.color, flexShrink: 0,
+                  }}>
+                    {i === 0 ? '👑' : `#${i + 1}`}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '15px', fontFamily: 'Orbitron, monospace', color: tc.color, fontWeight: 700 }}>{name}</div>
+                    <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Rajdhani, sans-serif' }}>Roblox Player</div>
+                  </div>
+                </div>
+              ))}
+              {card.winnerNames.length === 0 && (
+                <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.3)', fontFamily: 'Rajdhani, sans-serif' }}>Победители не определены</div>
+              )}
+            </div>
+          </div>
+
+          {/* Prize */}
+          {card.event.prize && (
+            <div style={{ marginTop: '16px', padding: '10px 14px', background: 'rgba(0,255,140,0.04)', border: '1px solid rgba(0,255,140,0.12)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🎖️</span>
+              <span style={{ fontSize: '14px', color: 'rgba(0,255,140,0.7)', fontFamily: 'Rajdhani, sans-serif' }}>{card.event.prize}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dots navigation */}
+      {cards.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
+          {cards.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              style={{
+                width: i === current ? '24px' : '8px',
+                height: '8px',
+                borderRadius: '4px',
+                background: i === current ? '#a855f7' : 'rgba(168,85,247,0.25)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                padding: 0,
+                boxShadow: i === current ? '0 0 10px rgba(168,85,247,0.5)' : 'none',
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Arrow buttons */}
+      {cards.length > 1 && (
+        <>
+          <button
+            onClick={() => goTo((current - 1 + cards.length) % cards.length)}
+            style={{
+              position: 'absolute', left: '-16px', top: '50%', transform: 'translateY(-50%)',
+              width: '32px', height: '32px', borderRadius: '50%',
+              background: 'rgba(124,58,255,0.15)', border: '1px solid rgba(124,58,255,0.3)',
+              color: '#c084fc', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,255,0.3)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(124,58,255,0.15)')}
+          >‹</button>
+          <button
+            onClick={() => goTo((current + 1) % cards.length)}
+            style={{
+              position: 'absolute', right: '-16px', top: '50%', transform: 'translateY(-50%)',
+              width: '32px', height: '32px', borderRadius: '50%',
+              background: 'rgba(124,58,255,0.15)', border: '1px solid rgba(124,58,255,0.3)',
+              color: '#c084fc', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,255,0.3)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(124,58,255,0.15)')}
+          >›</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function HomePage() {
   const { user, navigate } = useApp();
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [allEvents, setAllEvents] = useState<GameEvent[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [winnerCards, setWinnerCards] = useState<WinnerCard[]>([]);
 
   useEffect(() => {
     const unsub = listenEvents((evts) => {
@@ -72,6 +260,26 @@ export function HomePage() {
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    getAllUsers().then(setUsers);
+  }, []);
+
+  // Build winner cards from ended events
+  useEffect(() => {
+    if (allEvents.length === 0) return;
+    const ended = allEvents.filter(e => e.status === 'ended' && e.winners.length > 0);
+    const cards: WinnerCard[] = ended.map(ev => {
+      const winnerNames = ev.winners.map(wId => {
+        // For tournaments check team name
+        if (ev.type === 'tournament') return wId;
+        const u = users.find(u => u.id === wId);
+        return u ? (u.robloxUsername || u.username) : wId;
+      });
+      return { event: ev, winnerNames };
+    });
+    setWinnerCards(cards);
+  }, [allEvents, users]);
 
   const stats = {
     active: allEvents.filter(e => e.status === 'active').length,
@@ -137,7 +345,7 @@ export function HomePage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
           {[
             { icon: '🛡', title: 'АНТИБОТ', desc: 'Fingerprint + IP трекинг через Firebase. Невозможно создать второй аккаунт', color: '#a855f7' },
-            { icon: '🎁', title: 'РОЗЫГРЫШИ', desc: 'Честные розыгрыши с автоматическим выбором победителя', color: '#7c3aff' },
+            { icon: '🎁', title: 'РОЗЫГРЫШИ', desc: 'Честные розыгрыши с автоматическим выбором победителя. Мин. 1 минута', color: '#7c3aff' },
             { icon: '⚔', title: 'ТУРНИРЫ', desc: '1v1, 2v2, 3v3, 4v4, 6v6 форматы с командной системой', color: '#00ff8c' },
             { icon: '👥', title: 'КОМАНДЫ', desc: 'Создавайте команды и участвуйте вместе с друзьями', color: '#a855f7' },
           ].map((f, i) => (
@@ -166,6 +374,24 @@ export function HomePage() {
                 <EventCard event={event} onClick={() => navigate('event-detail', { eventId: event.id })} />
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* LAST WINNERS PREVIEW */}
+      {winnerCards.length > 0 && (
+        <section style={{ marginBottom: '64px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '18px' }}>🏆</span>
+              <span className="font-orbitron" style={{ fontSize: '14px', fontWeight: 700, color: '#00ff8c', letterSpacing: '0.1em' }}>ПОСЛЕДНИЕ ПОБЕДИТЕЛИ</span>
+            </div>
+            <button onClick={() => navigate('events')} className="btn-secondary" style={{ padding: '8px 16px', fontSize: '11px' }}>
+              АРХИВ →
+            </button>
+          </div>
+          <div style={{ padding: '0 20px' }}>
+            <WinnersCarousel cards={winnerCards} />
           </div>
         </section>
       )}

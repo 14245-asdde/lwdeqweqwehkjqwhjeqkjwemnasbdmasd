@@ -63,7 +63,7 @@ export function LoadingScreen({ onDone }: { onDone: () => void }) {
             <polygon points="50,15 80,32 80,68 50,85 20,68 20,32" stroke="rgba(168,85,247,0.5)" strokeWidth="1" fill="rgba(124,58,255,0.1)" />
             {/* Inner glow */}
             <circle cx="50" cy="50" r="22" fill="rgba(124,58,255,0.15)" />
-            <text x="50" y="56" textAnchor="middle" fontSize="13" fontFamily="Orbitron" fill="white" fontWeight="900">RA</text>
+            <text x="50" y="56" textAnchor="middle" fontSize="10" fontFamily="Orbitron" fill="white" fontWeight="900">TP</text>
 
             {/* Loading arc */}
             <circle cx="50" cy="50" r="45" stroke="#7c3aff" strokeWidth="2" fill="none"
@@ -77,10 +77,13 @@ export function LoadingScreen({ onDone }: { onDone: () => void }) {
 
         {/* Title */}
         <div style={{ textAlign: 'center' }}>
-          <div className="font-orbitron" style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '0.2em', color: '#c084fc', marginBottom: '6px' }}>
-            RBX<span style={{ color: '#00ff8c' }}>ARENA</span>
+          <div className="font-orbitron" style={{ fontSize: '26px', fontWeight: 900, letterSpacing: '0.15em', color: '#c084fc', marginBottom: '4px' }}>
+            TRAXER
           </div>
-          <div className="font-mono-tech" style={{ fontSize: '11px', color: 'rgba(0,255,140,0.5)', letterSpacing: '0.1em' }}>
+          <div className="font-orbitron" style={{ fontSize: '26px', fontWeight: 900, letterSpacing: '0.3em', color: '#00ff8c', marginBottom: '10px', textShadow: '0 0 20px rgba(0,255,140,0.6)' }}>
+            PLACE
+          </div>
+          <div className="font-mono-tech" style={{ fontSize: '11px', color: 'rgba(0,255,140,0.4)', letterSpacing: '0.12em' }}>
             ROBLOX TOURNAMENT PLATFORM
           </div>
         </div>
