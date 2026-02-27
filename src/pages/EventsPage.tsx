@@ -165,7 +165,7 @@ function EventCard({ event, onClick }: { event: GameEvent; onClick: () => void }
             {event.tournamentMode && <span className="badge badge-purple">{event.tournamentMode}</span>}
           </div>
           {isEnded ? (
-            <span className="badge badge-red">⚫ ENDED</span>
+            <span className="badge badge-red">⚫ ЗАВЕРШЁН</span>
           ) : (
             <span className="badge badge-green" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span className="status-dot-active" />LIVE
@@ -201,24 +201,12 @@ function EventCard({ event, onClick }: { event: GameEvent; onClick: () => void }
           )}
         </div>
 
-        {isEnded && event.winners.length > 0 && (
-          <div style={{ marginTop: '12px', padding: '8px 12px', background: 'rgba(0,255,140,0.05)', border: '1px solid rgba(0,255,140,0.15)', borderRadius: '8px' }}>
-            <div style={{ fontSize: '10px', fontFamily: 'Orbitron, monospace', color: 'rgba(0,255,140,0.5)', letterSpacing: '0.1em', marginBottom: '6px' }}>🏆 ПОБЕДИТЕЛЬ(И)</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-              {event.winners.slice(0, 3).map((w, i) => (
-                <span key={i} style={{ fontSize: '13px', color: '#00ff8c', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>
-                  {i > 0 && '• '}{w}
-                </span>
-              ))}
-              {event.winners.length > 3 && <span style={{ fontSize: '12px', color: 'rgba(0,255,140,0.4)' }}>+{event.winners.length - 3}</span>}
-            </div>
-          </div>
-        )}
-
-        {isEnded && event.winners.length === 0 && (
-          <div style={{ marginTop: '12px', textAlign: 'center' }}>
-            <span style={{ fontSize: '12px', color: 'rgba(200,180,255,0.3)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.08em' }}>
-              👆 НАЖМИТЕ — ПОДРОБНЕЕ
+        {/* Для завершённых — только кнопка "Нажмите для деталей" */}
+        {isEnded && (
+          <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', background: 'rgba(124,58,255,0.06)', border: '1px solid rgba(124,58,255,0.15)', borderRadius: '8px' }}>
+            <span style={{ fontSize: '16px' }}>🏆</span>
+            <span className="font-orbitron" style={{ fontSize: '11px', color: 'rgba(168,85,247,0.7)', letterSpacing: '0.1em' }}>
+              НАЖМИТЕ — СМОТРЕТЬ ПОБЕДИТЕЛЕЙ
             </span>
           </div>
         )}

@@ -1151,3 +1151,86 @@ export async function resetBracket(eventId: string): Promise<{ success: boolean;
     return { success: false, error: e?.message || 'Ошибка' };
   }
 }
+
+// ─── WINNER NAME RESOLVER ──────────────────────────────────────
+// Resolves winner IDs to display names:
+// - 1v1 tournament or giveaway/event: userId → robloxUsername
+// - 2v2+ tournament: teamId → { teamName, memberNicks[] }
+
+export interface ResolvedWinner {
+  id: string;
+  display: string;       // main display name (roblox nick or team name)
+  isTeam: boolean;
+  members?: string[];    // roblox nicks of team members (for 2v2+)
+}
+
+export async function resolveWinnerNames(
+  event: GameEvent,
+  winnerIds: string[]
+): Promise<ResolvedWinner[]> {
+  const results: ResolvedWinner[] = [];
+
+  for (const wId of winnerIds) {
+    if (!wId || wId === 'BYE') continue;
+
+    // For 1v1 tournaments: winner is a teamId but team has 1 member → show roblox nick
+    if (event.type === 'tournament' && event.tournamentMode === '1v1') {
+      // Try as teamId first
+      const team = await getTeam(wId);
+      if (team && team.memberIds.length > 0) {
+        const member = await getUserById(team.memberIds[0]);
+        results.push({
+          id: wId,
+          display: member?.robloxUsername || member?.username || wId.slice(0, 8),
+          isTeam: false,
+        });
+        continue;
+      }
+      // Fallback: try as userId
+      const user = await getUserById(wId);
+      if (user) {
+        results.push({
+          id: wId,
+          display: user.robloxUsername || user.username,
+          isTeam: false,
+        });
+        continue;
+      }
+    }
+
+    // For 2v2+ tournaments: winner is teamId → show team name + member nicks
+    if (event.type === 'tournament' && event.tournamentMode && event.tournamentMode !== '1v1') {
+      const team = await getTeam(wId);
+      if (team) {
+        const memberNicks: string[] = [];
+        for (const mId of team.memberIds) {
+          const u = await getUserById(mId);
+          if (u) memberNicks.push(u.robloxUsername || u.username);
+        }
+        results.push({
+          id: wId,
+          display: team.name,
+          isTeam: true,
+          members: memberNicks,
+        });
+        continue;
+      }
+    }
+
+    // For giveaway/event: winner is userId → show roblox nick
+    const user = await getUserById(wId);
+    if (user) {
+      results.push({
+        id: wId,
+        display: user.robloxUsername || user.username,
+        isTeam: false,
+      });
+      continue;
+    }
+
+    // Final fallback
+    results.push({ id: wId, display: wId.slice(0, 8) + '...', isTeam: false });
+  }
+
+  return results;
+}

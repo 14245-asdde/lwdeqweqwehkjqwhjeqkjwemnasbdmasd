@@ -33,20 +33,13 @@ export function Navbar({ onLogout }: NavbarProps) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '60px' }}>
 
           {/* Logo */}
-          <button onClick={() => navigate('home')} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', cursor: 'pointer' }}>
-            <div className="logo-icon" style={{ width: '40px', height: '40px', borderRadius: '11px', background: 'linear-gradient(135deg, #7c3aff 0%, #4c1d95 55%, #00c86e 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 22px rgba(124,58,255,0.5)', position: 'relative', flexShrink: 0 }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path d="M3 8l4-4h10l4 4-9 12L3 8z" stroke="#00ff8c" strokeWidth="1.4" fill="rgba(124,58,255,0.25)" strokeLinejoin="round"/>
-                <path d="M8 8l4 9 4-9" stroke="rgba(255,255,255,0.6)" strokeWidth="1" fill="none" strokeLinejoin="round"/>
-              </svg>
+          <button onClick={() => navigate('home')} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', overflow: 'hidden', background: 'rgba(124,58,255,0.1)', border: '1px solid rgba(124,58,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 18px rgba(124,58,255,0.35)', flexShrink: 0 }}>
+              <img src="/p1.png" alt="logo" style={{ width: '36px', height: '36px', objectFit: 'contain', filter: 'drop-shadow(0 0 6px rgba(124,58,255,0.6))' }} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', lineHeight: 1 }}>
-              <span className="font-orbitron" style={{ fontSize: '14px', fontWeight: 900, letterSpacing: '0.18em', color: '#e2d9ff', textTransform: 'uppercase' }}>
-                Traxer
-              </span>
-              <span className="font-orbitron" style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.3em', color: '#00ff8c', textTransform: 'uppercase', marginTop: '1px' }}>
-                Place
-              </span>
+              <span className="font-orbitron" style={{ fontSize: '14px', fontWeight: 900, letterSpacing: '0.18em', color: '#e2d9ff', textTransform: 'uppercase' }}>Traxer</span>
+              <span className="font-orbitron" style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.3em', color: '#00ff8c', textTransform: 'uppercase', marginTop: '1px' }}>Place</span>
             </div>
           </button>
 

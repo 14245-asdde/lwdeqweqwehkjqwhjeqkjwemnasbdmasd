@@ -17,18 +17,12 @@ export function Footer() {
           {/* Brand */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <div className="logo-icon" style={{ width: '34px', height: '34px' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 8l4-4h10l4 4-9 12L3 8z" stroke="#00ff8c" strokeWidth="1.5" fill="rgba(124,58,255,0.3)" strokeLinejoin="round"/>
-                </svg>
+              <div style={{ width: '38px', height: '38px', borderRadius: '10px', overflow: 'hidden', background: 'rgba(124,58,255,0.1)', border: '1px solid rgba(124,58,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <img src="/p1.png" alt="logo" style={{ width: '34px', height: '34px', objectFit: 'contain', filter: 'drop-shadow(0 0 5px rgba(124,58,255,0.5))' }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
-                <span className="font-orbitron" style={{ fontSize: '13px', fontWeight: 900, letterSpacing: '0.18em', color: '#e2d9ff' }}>
-                  TRAXER
-                </span>
-                <span className="font-orbitron" style={{ fontSize: '9px', fontWeight: 600, letterSpacing: '0.3em', color: '#00ff8c', marginTop: '1px' }}>
-                  PLACE
-                </span>
+                <span className="font-orbitron" style={{ fontSize: '13px', fontWeight: 900, letterSpacing: '0.18em', color: '#e2d9ff' }}>TRAXER</span>
+                <span className="font-orbitron" style={{ fontSize: '9px', fontWeight: 600, letterSpacing: '0.3em', color: '#00ff8c', marginTop: '1px' }}>PLACE</span>
               </div>
             </div>
             <p style={{ fontSize: '14px', color: 'rgba(200,180,255,0.4)', lineHeight: '1.7' }}>

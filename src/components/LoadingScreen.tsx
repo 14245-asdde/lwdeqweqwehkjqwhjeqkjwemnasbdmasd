@@ -49,30 +49,23 @@ export function LoadingScreen({ onDone }: { onDone: () => void }) {
       <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px', width: '320px' }}>
 
         {/* Logo */}
-        <div style={{ position: 'relative' }}>
-          <svg width="80" height="80" viewBox="0 0 100 100">
-            {/* Outer ring */}
-            <circle cx="50" cy="50" r="45" stroke="rgba(124,58,255,0.2)" strokeWidth="1" fill="none"
-              style={{ animation: 'loadSpin 4s linear infinite' }}
-            />
-            {/* Dashed ring */}
-            <circle cx="50" cy="50" r="38" stroke="rgba(0,255,140,0.15)" strokeWidth="1" strokeDasharray="8 4" fill="none"
-              style={{ animation: 'loadSpin 2s linear infinite reverse' }}
-            />
-            {/* Hex */}
-            <polygon points="50,15 80,32 80,68 50,85 20,68 20,32" stroke="rgba(168,85,247,0.5)" strokeWidth="1" fill="rgba(124,58,255,0.1)" />
-            {/* Inner glow */}
-            <circle cx="50" cy="50" r="22" fill="rgba(124,58,255,0.15)" />
-            <text x="50" y="56" textAnchor="middle" fontSize="10" fontFamily="Orbitron" fill="white" fontWeight="900">TP</text>
-
-            {/* Loading arc */}
-            <circle cx="50" cy="50" r="45" stroke="#7c3aff" strokeWidth="2" fill="none"
-              strokeDasharray={`${progress * 2.83} 283`}
-              strokeLinecap="round"
-              transform="rotate(-90 50 50)"
-              style={{ transition: 'stroke-dasharray 0.05s linear' }}
-            />
-          </svg>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', width: '100px', height: '100px' }}>
+            <svg width="100" height="100" viewBox="0 0 100 100" style={{ position: 'absolute', inset: 0 }}>
+              <circle cx="50" cy="50" r="48" stroke="rgba(124,58,255,0.2)" strokeWidth="1" fill="none"
+                style={{ animation: 'loadSpin 4s linear infinite' }} />
+              <circle cx="50" cy="50" r="40" stroke="rgba(0,255,140,0.15)" strokeWidth="1" strokeDasharray="8 4" fill="none"
+                style={{ animation: 'loadSpin 2s linear infinite reverse' }} />
+              <circle cx="50" cy="50" r="48" stroke="#7c3aff" strokeWidth="2.5" fill="none"
+                strokeDasharray={`${progress * 3.016} 301.6`}
+                strokeLinecap="round"
+                transform="rotate(-90 50 50)"
+                style={{ transition: 'stroke-dasharray 0.05s linear' }} />
+            </svg>
+            <div style={{ position: 'absolute', inset: '12px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,5,25,0.7)' }}>
+              <img src="/p1.png" alt="Traxer Place" style={{ width: '64px', height: '64px', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(124,58,255,0.7))' }} />
+            </div>
+          </div>
         </div>
 
         {/* Title */}
