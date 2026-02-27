@@ -3,7 +3,7 @@ import { useApp } from '../App';
 import {
   listenEvent, joinEvent, leaveEvent, getTeam, getUserById,
   endEvent, generateBracket, advanceBracket, resetBracket, getAllTeams,
-  type GameEvent, type Team,
+  type GameEvent, type Team, type User,
 } from '../store/db';
 import { TournamentBracketView } from '../components/TournamentBracket';
 
@@ -102,10 +102,9 @@ function CountdownBig({ endsAt }: { endsAt: number }) {
 }
 
 // ─── Winner Display ─────────────────────────────────────────────
-// Показывает 1 блок победителя: для 1v1 — ник, для 2v2+ — название команды + список участников
 interface WinnerInfo {
-  displayName: string;       // название команды или ник
-  members?: string[];        // участники команды (если турнир 2v2+)
+  displayName: string;
+  members?: string[];
   isTeam: boolean;
 }
 
@@ -122,8 +121,6 @@ function WinnerDisplay({ winnerInfo, eventType }: { winnerInfo: WinnerInfo; even
       <div className="font-orbitron" style={{ fontSize: '12px', color: 'rgba(0,255,140,0.6)', letterSpacing: '0.25em', marginBottom: '24px' }}>
         🏆 {eventType === 'tournament' ? 'ПОБЕДИВШАЯ КОМАНДА' : 'ПОБЕДИТЕЛЬ РОЗЫГРЫША'}
       </div>
-
-      {/* Winner card */}
       <div style={{
         display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '16px',
         padding: '24px 36px',
@@ -142,8 +139,6 @@ function WinnerDisplay({ winnerInfo, eventType }: { winnerInfo: WinnerInfo; even
         }}>
           {winnerInfo.isTeam ? '⚔️' : '👑'}
         </div>
-
-        {/* Team name or player nick */}
         <div style={{
           fontFamily: 'Orbitron, monospace', fontSize: '22px', fontWeight: 900,
           color: '#00ff8c',
@@ -151,55 +146,33 @@ function WinnerDisplay({ winnerInfo, eventType }: { winnerInfo: WinnerInfo; even
           letterSpacing: '0.06em',
         }}>{winnerInfo.displayName}</div>
 
-        {/* Team members list (only for 2v2+) */}
+        {/* Team members (only for 2v2+) */}
         {winnerInfo.isTeam && winnerInfo.members && winnerInfo.members.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
-            <div style={{ fontSize: '10px', color: 'rgba(0,255,140,0.4)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.15em', marginBottom: '4px' }}>
-              СОСТАВ
-            </div>
+            <div style={{ fontSize: '10px', color: 'rgba(0,255,140,0.4)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.15em', marginBottom: '4px' }}>СОСТАВ</div>
             {winnerInfo.members.map((m, i) => (
               <div key={i} style={{
-                padding: '6px 12px',
-                background: 'rgba(0,255,140,0.07)',
-                border: '1px solid rgba(0,255,140,0.2)',
-                borderRadius: '7px',
+                padding: '6px 12px', background: 'rgba(0,255,140,0.07)',
+                border: '1px solid rgba(0,255,140,0.2)', borderRadius: '7px',
                 fontSize: '14px', color: 'rgba(0,255,140,0.85)',
                 fontFamily: 'Rajdhani, sans-serif', fontWeight: 600,
                 display: 'flex', alignItems: 'center', gap: '8px',
               }}>
-                <span style={{ fontSize: '12px' }}>🎮</span>
-                {m}
+                <span style={{ fontSize: '12px' }}>🎮</span>{m}
               </div>
             ))}
           </div>
         )}
-
-        <div style={{ fontSize: '13px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif' }}>
-          🎉 ПОБЕДИТЕЛЬ
-        </div>
+        <div style={{ fontSize: '13px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif' }}>🎉 ПОБЕДИТЕЛЬ</div>
       </div>
     </div>
   );
 }
 
-// ─── Live indicator ────────────────────────────────────────────
 function LiveBadge() {
   return (
-    <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: '7px',
-      padding: '5px 12px',
-      background: 'rgba(0,255,140,0.08)',
-      border: '1px solid rgba(0,255,140,0.25)',
-      borderRadius: '100px',
-      marginLeft: '10px',
-    }}>
-      <span style={{
-        width: '7px', height: '7px', borderRadius: '50%',
-        background: '#00ff8c',
-        boxShadow: '0 0 8px #00ff8c',
-        animation: 'statusPulse 1.2s ease infinite',
-        display: 'inline-block',
-      }} />
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '5px 12px', background: 'rgba(0,255,140,0.08)', border: '1px solid rgba(0,255,140,0.25)', borderRadius: '100px', marginLeft: '10px' }}>
+      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#00ff8c', boxShadow: '0 0 8px #00ff8c', animation: 'statusPulse 1.2s ease infinite', display: 'inline-block' }} />
       <span style={{ fontSize: '9px', fontFamily: 'Orbitron, monospace', color: '#00ff8c', letterSpacing: '0.12em', fontWeight: 700 }}>LIVE</span>
     </div>
   );
@@ -211,14 +184,18 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
   const [event, setEvent] = useState<GameEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // participant name maps
   const [participantNames, setParticipantNames] = useState<Record<string, string>>({});
+  const [teamsMap, setTeamsMap] = useState<Record<string, Team>>({});
+  const [teamMembersMap, setTeamMembersMap] = useState<Record<string, User[]>>({});
+  const [teamNamesMap, setTeamNamesMap] = useState<Record<string, string>>({});
+
   const [winnerInfo, setWinnerInfo] = useState<WinnerInfo | null>(null);
   const [bracketEditMode, setBracketEditMode] = useState(false);
   const [generatingBracket, setGeneratingBracket] = useState(false);
   const [activeTab, setActiveTab] = useState<'info' | 'bracket' | 'participants'>('info');
-  const [teamNamesMap, setTeamNamesMap] = useState<Record<string, string>>({});
-  // For tournament: store full team objects to get member names
-  const [teamsMap, setTeamsMap] = useState<Record<string, Team>>({});
+
   const namesLoadedRef = useRef(false);
   const prevParticipantsRef = useRef('');
 
@@ -238,14 +215,21 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
       if (!namesLoadedRef.current || participantsChanged) {
         namesLoadedRef.current = true;
         prevParticipantsRef.current = pKey;
-        await loadParticipantNames(e);
-      }
+        const { nameMap, tMap, memberMap } = await loadParticipantNames(e);
 
-      // Always recompute winner info when event updates
-      if (e.winners && e.winners.length > 0) {
-        await computeWinnerInfo(e);
+        // Compute winner once names are loaded
+        if (e.winners && e.winners.length > 0) {
+          await computeWinnerInfo(e, nameMap, tMap, memberMap);
+        } else {
+          setWinnerInfo(null);
+        }
       } else {
-        setWinnerInfo(null);
+        // Names already loaded — just recompute winner
+        if (e.winners && e.winners.length > 0) {
+          await computeWinnerInfoFromState(e);
+        } else {
+          setWinnerInfo(null);
+        }
       }
     });
 
@@ -255,22 +239,33 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
   const loadParticipantNames = async (e: GameEvent) => {
     const nameMap: Record<string, string> = {};
     const tMap: Record<string, Team> = {};
+    const memberMap: Record<string, User[]> = {};
 
     if (e.type === 'tournament') {
+      // Load all teams
       const allTeams = await getAllTeams();
       allTeams.forEach(t => {
         nameMap[t.id] = t.name;
         tMap[t.id] = t;
       });
-      // Also fetch any remaining
       for (const pid of e.participants) {
-        if (!nameMap[pid]) {
+        if (!tMap[pid]) {
           const team = await getTeam(pid);
-          if (team) { nameMap[pid] = team.name; tMap[pid] = team; }
+          if (team) { nameMap[team.id] = team.name; tMap[team.id] = team; }
         }
       }
+      // Load all members of all teams
+      for (const team of Object.values(tMap)) {
+        const members: User[] = [];
+        for (const mid of team.memberIds) {
+          const u = await getUserById(mid);
+          if (u) members.push(u);
+        }
+        memberMap[team.id] = members;
+      }
     } else {
-      for (const pid of e.participants.slice(0, 80)) {
+      // Giveaway/event — load users
+      for (const pid of e.participants.slice(0, 100)) {
         const u = await getUserById(pid);
         if (u) nameMap[pid] = u.robloxUsername || u.username;
       }
@@ -279,52 +274,65 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
     setParticipantNames(nameMap);
     setTeamNamesMap(nameMap);
     setTeamsMap(tMap);
-    return { nameMap, tMap };
+    setTeamMembersMap(memberMap);
+    return { nameMap, tMap, memberMap };
   };
 
-  // Build winner info — for 1v1 show roblox nick, for 2v2+ show team name + member roblox nicks
-  const computeWinnerInfo = async (e: GameEvent) => {
+  const computeWinnerInfo = async (
+    e: GameEvent,
+    nameMap: Record<string, string>,
+    tMap: Record<string, Team>,
+    memberMap: Record<string, User[]>
+  ) => {
     if (!e.winners || e.winners.length === 0) { setWinnerInfo(null); return; }
     const winnerId = e.winners[0];
 
     if (e.type === 'tournament') {
-      // Get team
-      let team = teamsMap[winnerId] || await getTeam(winnerId);
-      if (team) {
-        const mode = e.tournamentMode || '1v1';
-        const teamSize = parseInt(mode.split('v')[0]);
-        let members: string[] = [];
+      const mode = e.tournamentMode || '1v1';
+      const teamSize = parseInt(mode.split('v')[0]);
 
-        if (teamSize > 1) {
-          // Load roblox nicks of all team members
-          const memberPromises = team.memberIds.slice(0, teamSize).map(async (mid) => {
-            const u = await getUserById(mid);
-            return u ? (u.robloxUsername || u.username) : mid.slice(0, 8);
-          });
-          members = await Promise.all(memberPromises);
+      if (teamSize <= 1) {
+        // 1v1 — show roblox nick of the single team member
+        const team = tMap[winnerId] || await getTeam(winnerId);
+        if (team && team.memberIds.length > 0) {
+          const firstMember = memberMap[team.id]?.[0] || await getUserById(team.memberIds[0]);
+          const nick = firstMember ? (firstMember.robloxUsername || firstMember.username) : team.name;
+          setWinnerInfo({ displayName: nick, isTeam: false });
+        } else {
+          // Fallback — try as user directly
+          const u = await getUserById(winnerId);
+          setWinnerInfo({ displayName: u ? (u.robloxUsername || u.username) : `Игрок #${winnerId.slice(0, 6)}`, isTeam: false });
         }
-
-        setWinnerInfo({
-          displayName: team.name,
-          members: teamSize > 1 ? members : undefined,
-          isTeam: teamSize > 1,
-        });
       } else {
-        // Fallback: try user
-        const u = await getUserById(winnerId);
-        setWinnerInfo({
-          displayName: u ? (u.robloxUsername || u.username) : `Игрок #${winnerId.slice(0, 6)}`,
-          isTeam: false,
-        });
+        // 2v2+ — show team name + member roblox nicks
+        const team = tMap[winnerId] || await getTeam(winnerId);
+        if (team) {
+          let members = memberMap[team.id];
+          if (!members) {
+            members = [];
+            for (const mid of team.memberIds.slice(0, teamSize)) {
+              const u = await getUserById(mid);
+              if (u) members.push(u);
+            }
+          }
+          const memberNicks = members.slice(0, teamSize).map(u => u.robloxUsername || u.username);
+          setWinnerInfo({ displayName: team.name, members: memberNicks, isTeam: true });
+        } else {
+          setWinnerInfo({ displayName: nameMap[winnerId] || `#${winnerId.slice(0, 6)}`, isTeam: false });
+        }
       }
     } else {
-      // Giveaway / event — show roblox nick
+      // Giveaway / event — roblox nick
       const u = await getUserById(winnerId);
       setWinnerInfo({
-        displayName: u ? (u.robloxUsername || u.username) : `Игрок #${winnerId.slice(0, 6)}`,
+        displayName: u ? (u.robloxUsername || u.username) : (nameMap[winnerId] || `Игрок #${winnerId.slice(0, 6)}`),
         isTeam: false,
       });
     }
+  };
+
+  const computeWinnerInfoFromState = async (e: GameEvent) => {
+    await computeWinnerInfo(e, participantNames, teamsMap, teamMembersMap);
   };
 
   const handleJoin = async () => {
@@ -365,7 +373,7 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
     setTeamNamesMap(freshMap);
     const res = await generateBracket(eventId, freshMap);
     if (res.success) {
-      showToast('🎲 Сетка сгенерирована! Обновляется у всех автоматически.', 'success');
+      showToast('🎲 Сетка сгенерирована! Обновляется у всех.', 'success');
       setActiveTab('bracket');
     } else showToast(res.error || 'Ошибка', 'error');
     setGeneratingBracket(false);
@@ -388,7 +396,7 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
     }
     setTeamNamesMap(freshMap);
     const res = await advanceBracket(eventId, round, matchIndex, loserId, freshMap);
-    if (res.success) showToast('✓ Победитель продвинут! Сетка обновлена у всех.', 'success');
+    if (res.success) showToast('✓ Победитель продвинут!', 'success');
     else showToast(res.error || 'Ошибка', 'error');
   };
 
@@ -453,12 +461,11 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
         }
       `}</style>
 
-      {/* Back */}
       <button className="btn-secondary" onClick={() => navigate('events')} style={{ marginBottom: '28px', padding: '10px 20px', fontSize: '12px' }}>
         ← НАЗАД К ИВЕНТАМ
       </button>
 
-      {/* Header card */}
+      {/* Header */}
       <div className="panel panel-top-glow" style={{ overflow: 'hidden', marginBottom: '20px' }}>
         <div style={{ height: '5px', background: td.stripe }} />
         <div style={{ padding: '30px 36px 20px' }}>
@@ -509,14 +516,12 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Content */}
       <div style={{ animation: 'tabSlide 0.3s ease' }} key={activeTab}>
 
-        {/* ── INFO TAB ── */}
+        {/* ── INFO ── */}
         {activeTab === 'info' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-            {/* Prize */}
             {event.prize && (
               <div className="panel" style={{ padding: '24px 28px', display: 'flex', alignItems: 'center', gap: '18px', borderLeft: '4px solid rgba(0,255,140,0.4)', background: 'linear-gradient(135deg, rgba(0,255,140,0.04), rgba(0,200,100,0.02))' }}>
                 <span style={{ fontSize: '40px' }}>🏆</span>
@@ -527,7 +532,6 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
               </div>
             )}
 
-            {/* Stats grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
               {[
                 { label: 'УЧАСТНИКОВ', value: `${event.participants.length}${event.maxParticipants > 0 ? ` / ${event.maxParticipants}` : ''}`, icon: '👥', color: td.color },
@@ -542,7 +546,6 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
               ))}
             </div>
 
-            {/* Countdown */}
             {isActive && (
               <div className="panel" style={{ padding: '32px', textAlign: 'center' }}>
                 <div className="font-orbitron" style={{ fontSize: '11px', color: 'rgba(200,180,255,0.4)', letterSpacing: '0.22em', marginBottom: '24px' }}>⏱ ОСТАЛОСЬ ВРЕМЕНИ</div>
@@ -550,12 +553,12 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
               </div>
             )}
 
-            {/* ── Winner display — ЕДИНСТВЕННЫЙ блок ── */}
-            {(isEnded || (event.type === 'tournament' && event.status === 'ended')) && winnerInfo && (
+            {/* Winner — SINGLE block */}
+            {winnerInfo && (isEnded || event.status === 'ended') && (
               <WinnerDisplay winnerInfo={winnerInfo} eventType={event.type} />
             )}
 
-            {/* Waiting for winner */}
+            {/* Waiting for bot */}
             {isEnded && !winnerInfo && event.type !== 'tournament' && (
               <div className="panel" style={{ padding: '32px', textAlign: 'center' }}>
                 {event.participants.length === 0 ? (
@@ -577,7 +580,7 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
               </div>
             )}
 
-            {/* Action button */}
+            {/* Action */}
             {isActive && (
               <div className="panel" style={{ padding: '28px' }}>
                 {!user ? (
@@ -601,30 +604,23 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
                 )}
                 {event.type === 'tournament' && user && !user.teamId && (
                   <p style={{ fontSize: '14px', color: 'rgba(249,115,22,0.7)', marginTop: '14px', fontFamily: 'Rajdhani, sans-serif' }}>
-                    ⚠ Для участия в турнире создайте команду в{' '}
+                    ⚠ Создайте команду в{' '}
                     <span style={{ color: '#f97316', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => navigate('profile')}>профиле</span>
                   </p>
                 )}
               </div>
             )}
 
-            {/* Tournament: registration closed, waiting for bracket */}
             {event.type === 'tournament' && event.status === 'active' && isExpired && !hasBracket && (
               <div className="panel" style={{ padding: '28px', textAlign: 'center', borderLeft: '4px solid rgba(249,115,22,0.5)' }}>
                 <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚔️</div>
-                <div className="font-orbitron" style={{ fontSize: '14px', color: 'rgba(249,115,22,0.8)', letterSpacing: '0.1em', marginBottom: '8px' }}>
-                  НАБОР ЗАВЕРШЁН
-                </div>
+                <div className="font-orbitron" style={{ fontSize: '14px', color: 'rgba(249,115,22,0.8)', letterSpacing: '0.1em', marginBottom: '8px' }}>НАБОР ЗАВЕРШЁН</div>
                 <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Rajdhani, sans-serif' }}>
-                  Ожидайте генерации турнирной сетки администратором
+                  Ожидайте генерации турнирной сетки
                 </div>
                 {user?.isAdmin && (
-                  <button
-                    className="btn-primary"
-                    onClick={() => setActiveTab('bracket')}
-                    style={{ marginTop: '16px', padding: '12px 24px', fontSize: '12px', background: 'linear-gradient(135deg, #f97316, #ef4444)' }}
-                  >
-                    ⚔️ ПЕРЕЙТИ К СЕТКЕ
+                  <button className="btn-primary" onClick={() => setActiveTab('bracket')} style={{ marginTop: '16px', padding: '12px 24px', fontSize: '12px', background: 'linear-gradient(135deg, #f97316, #ef4444)' }}>
+                    ⚔️ К СЕТКЕ
                   </button>
                 )}
               </div>
@@ -632,19 +628,15 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
           </div>
         )}
 
-        {/* ── BRACKET TAB ── */}
+        {/* ── BRACKET ── */}
         {activeTab === 'bracket' && event.type === 'tournament' && (
           <div>
             {user?.isAdmin && (
               <div className="panel" style={{ padding: '22px', marginBottom: '16px', borderLeft: '4px solid rgba(249,115,22,0.5)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                  <div className="font-orbitron" style={{ fontSize: '11px', color: 'rgba(249,115,22,0.8)', letterSpacing: '0.16em' }}>
-                    ⚙ УПРАВЛЕНИЕ ТУРНИРНОЙ СЕТКОЙ
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                  <div className="font-orbitron" style={{ fontSize: '11px', color: 'rgba(249,115,22,0.8)', letterSpacing: '0.16em' }}>⚙ УПРАВЛЕНИЕ СЕТКОЙ</div>
                   <LiveBadge />
-                  <span style={{ fontSize: '12px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif' }}>
-                    Изменения видны всем участникам мгновенно
-                  </span>
+                  <span style={{ fontSize: '12px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif' }}>Изменения видны всем мгновенно</span>
                 </div>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
                   {!hasBracket ? (
@@ -656,7 +648,7 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
                     >
                       {generatingBracket
                         ? <><span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }} /> Генерация...</>
-                        : '🎲 СГЕНЕРИРОВАТЬ СЕТКУ РАНДОМНО'}
+                        : '🎲 СГЕНЕРИРОВАТЬ СЕТКУ'}
                     </button>
                   ) : (
                     <>
@@ -671,21 +663,15 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
                           borderRadius: '9px', transition: 'all 0.2s',
                         }}
                       >
-                        {bracketEditMode ? '✅ РЕДАКТИРОВАНИЕ ВКЛ' : '✏️ РЕДАКТИРОВАТЬ СЕТКУ'}
+                        {bracketEditMode ? '✅ РЕЖИМ РЕДАКТИРОВАНИЯ' : '✏️ РЕДАКТИРОВАТЬ'}
                       </button>
-                      <button
-                        className="btn-secondary"
-                        onClick={handleResetBracket}
-                        style={{ padding: '12px 20px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.3)', color: '#ef4444' }}
-                      >
+                      <button className="btn-secondary" onClick={handleResetBracket} style={{ padding: '12px 20px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.3)', color: '#ef4444' }}>
                         🔄 ПЕРЕСОЗДАТЬ
                       </button>
                     </>
                   )}
                   {event.participants.length < 2 && !hasBracket && (
-                    <span style={{ fontSize: '14px', color: 'rgba(249,115,22,0.6)', fontFamily: 'Rajdhani, sans-serif' }}>
-                      ⚠ Нужно минимум 2 команды
-                    </span>
+                    <span style={{ fontSize: '14px', color: 'rgba(249,115,22,0.6)', fontFamily: 'Rajdhani, sans-serif' }}>⚠ Нужно мин. 2 команды</span>
                   )}
                 </div>
               </div>
@@ -695,11 +681,9 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
               <div className="panel" style={{ padding: '28px', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
-                    <h3 className="font-orbitron" style={{ fontSize: '15px', color: '#c084fc', letterSpacing: '0.12em', marginBottom: '6px' }}>
-                      ⚔️ ТУРНИРНАЯ СЕТКА
-                    </h3>
+                    <h3 className="font-orbitron" style={{ fontSize: '15px', color: '#c084fc', letterSpacing: '0.12em', marginBottom: '6px' }}>⚔️ ТУРНИРНАЯ СЕТКА</h3>
                     <p style={{ fontSize: '14px', color: 'rgba(200,180,255,0.4)', fontFamily: 'Rajdhani, sans-serif' }}>
-                      {event.bracket.rounds.length} раундов • {event.participants.length} команд
+                      {event.bracket.rounds.length} раундов · {event.participants.length} команд
                     </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -717,24 +701,24 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
                   isAdmin={!!user?.isAdmin}
                   editMode={bracketEditMode}
                   teamNames={teamNamesMap}
+                  teamMembersMap={teamMembersMap}
+                  tournamentMode={event.tournamentMode || '1v1'}
                   onSelectLoser={handleSelectLoser}
                 />
               </div>
             ) : (
               <div className="panel" style={{ padding: '70px', textAlign: 'center' }}>
                 <div style={{ fontSize: '64px', marginBottom: '24px', opacity: 0.2 }}>⚔️</div>
-                <div className="font-orbitron" style={{ fontSize: '15px', color: 'rgba(200,180,255,0.3)', letterSpacing: '0.1em', marginBottom: '10px' }}>
-                  СЕТКА ЕЩЁ НЕ СОЗДАНА
-                </div>
+                <div className="font-orbitron" style={{ fontSize: '15px', color: 'rgba(200,180,255,0.3)', letterSpacing: '0.1em', marginBottom: '10px' }}>СЕТКА НЕ СОЗДАНА</div>
                 <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.2)', fontFamily: 'Rajdhani, sans-serif' }}>
-                  {user?.isAdmin ? 'Нажмите кнопку выше чтобы сгенерировать' : 'Ожидайте генерации сетки администратором'}
+                  {user?.isAdmin ? 'Нажмите кнопку выше' : 'Ожидайте генерации администратором'}
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* ── PARTICIPANTS TAB ── */}
+        {/* ── PARTICIPANTS ── */}
         {activeTab === 'participants' && (
           <div className="panel" style={{ padding: '28px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
@@ -749,11 +733,19 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
                 <div style={{ fontFamily: 'Rajdhani, sans-serif', color: 'rgba(200,180,255,0.5)', fontSize: '16px' }}>Участников пока нет</div>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
                 {event.participants.map((pid, i) => {
-                  const name = participantNames[pid] || pid.slice(0, 8) + '...';
                   const isWinner = event.winners.includes(pid);
                   const teamObj = event.type === 'tournament' ? teamsMap[pid] : null;
+                  const teamMode = event.tournamentMode || '1v1';
+                  const teamSize = parseInt(teamMode.split('v')[0]);
+                  const is1v1 = teamSize <= 1;
+
+                  // Name to display
+                  let displayName = participantNames[pid] || '';
+                  if (!displayName) displayName = pid.slice(0, 8) + '...';
+
+                  const members = teamObj ? (teamMembersMap[teamObj.id] || []) : [];
 
                   return (
                     <div key={pid} style={{
@@ -763,7 +755,7 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
                       borderRadius: '10px',
                       boxShadow: isWinner ? '0 0 20px rgba(0,255,140,0.08)' : 'none',
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: teamObj ? '8px' : '0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: members.length > 0 && !is1v1 ? '8px' : '0' }}>
                         <div style={{
                           width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0,
                           background: isWinner ? 'rgba(0,255,140,0.15)' : 'rgba(124,58,255,0.1)',
@@ -774,36 +766,40 @@ export function EventDetailPage({ eventId }: { eventId: string }) {
                           {isWinner ? '👑' : String(i + 1).padStart(2, '0')}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          {/* Team name (bold) or player roblox nick */}
-                          <div style={{
-                            fontSize: '14px', fontFamily: 'Orbitron, monospace', fontWeight: 700,
-                            color: isWinner ? '#00ff8c' : '#c084fc',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            textShadow: isWinner ? '0 0 12px rgba(0,255,140,0.5)' : 'none',
-                          }}>
-                            {name}
-                          </div>
-                          {teamObj && (
-                            <div style={{ fontSize: '12px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif' }}>
-                              {teamObj.memberIds.length} игроков
+                          {/* For 1v1 — show roblox nick of first member; for 2v2+ — show team name */}
+                          {teamObj && is1v1 ? (
+                            // 1v1: show roblox nick
+                            <div style={{ fontSize: '14px', fontFamily: 'Orbitron, monospace', fontWeight: 700, color: isWinner ? '#00ff8c' : '#c084fc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {members[0] ? (members[0].robloxUsername || members[0].username) : displayName}
+                            </div>
+                          ) : teamObj ? (
+                            // 2v2+: show team name
+                            <>
+                              <div style={{ fontSize: '14px', fontFamily: 'Orbitron, monospace', fontWeight: 700, color: isWinner ? '#00ff8c' : '#c084fc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                ⚔ {teamObj.name}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Rajdhani, sans-serif' }}>
+                                {members.length} игроков
+                              </div>
+                            </>
+                          ) : (
+                            // Non-tournament
+                            <div style={{ fontSize: '14px', fontFamily: 'Orbitron, monospace', fontWeight: 700, color: isWinner ? '#00ff8c' : '#c084fc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              🎮 {displayName}
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Team members list */}
-                      {teamObj && teamObj.memberIds.length > 0 && (
+                      {/* Team members list for 2v2+ */}
+                      {teamObj && !is1v1 && members.length > 0 && (
                         <div style={{ paddingLeft: '46px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          {teamObj.memberIds.slice(0, 6).map((mid) => {
-                            // We show member info from participantNames won't work here,
-                            // so just show member IDs short — they'll be loaded async
-                            return (
-                              <div key={mid} style={{ fontSize: '12px', color: 'rgba(200,180,255,0.45)', fontFamily: 'Rajdhani, sans-serif', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <span style={{ color: 'rgba(0,255,140,0.4)' }}>›</span>
-                                {mid.slice(0, 8)}...
-                              </div>
-                            );
-                          })}
+                          {members.slice(0, teamSize).map((member) => (
+                            <div key={member.id} style={{ fontSize: '12px', color: 'rgba(200,180,255,0.55)', fontFamily: 'Rajdhani, sans-serif', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span style={{ color: 'rgba(0,255,140,0.5)' }}>›</span>
+                              🎮 {member.robloxUsername || member.username}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../App';
 import {
-  createTeam, inviteToTeam, respondToTeamInvite, leaveTeam,
+  createTeam, inviteToTeam, respondToTeamInvite, leaveTeam, kickFromTeam,
   changeRobloxUsername, markNotificationRead, getAllEvents, listenUser, listenTeam,
   getAllUsers, getUserById, generateTeamInviteLink, useTeamInviteLink,
   type Team, type GameEvent, type Notification
@@ -171,6 +171,15 @@ export function ProfilePage() {
       showToast('Вы покинули команду', 'info');
       await refreshUser();
     } else showToast(res.error || 'Ошибка', 'error');
+    setLoading(false);
+  };
+
+  const handleKickMember = async (memberId: string) => {
+    if (!user) return;
+    setLoading(true);
+    const res = await kickFromTeam(user.id, memberId);
+    if (res.success) showToast('Участник исключён', 'info');
+    else showToast(res.error || 'Ошибка', 'error');
     setLoading(false);
   };
 
@@ -474,6 +483,19 @@ export function ProfilePage() {
                               </div>
                             )}
                           </div>
+                          {/* Kick button — only for owner, not for self */}
+                          {team.ownerId === user.id && !isMe && (
+                            <button
+                              onClick={() => handleKickMember(mid)}
+                              disabled={loading}
+                              title="Исключить из команды"
+                              style={{ padding: '6px 10px', fontSize: '11px', fontWeight: 700, fontFamily: 'Orbitron, monospace', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', flexShrink: 0, transition: 'all 0.2s' }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.18)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
+                            >
+                              ✕ КИК
+                            </button>
+                          )}
                         </div>
                       );
                     })}

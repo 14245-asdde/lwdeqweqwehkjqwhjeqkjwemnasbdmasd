@@ -661,6 +661,41 @@ export async function respondToTeamInvite(
   }
 }
 
+export async function kickFromTeam(
+  ownerId: string,
+  memberId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const owner = await getUserById(ownerId);
+    if (!owner || !owner.teamId) return { success: false, error: 'Нет команды' };
+    if (ownerId === memberId) return { success: false, error: 'Нельзя исключить себя' };
+
+    const teamRef = doc(db, 'teams', owner.teamId);
+    const teamSnap = await getDoc(teamRef);
+    if (!teamSnap.exists()) return { success: false, error: 'Команда не найдена' };
+    const team = teamSnap.data() as Team;
+
+    if (team.ownerId !== ownerId) return { success: false, error: 'Только лидер может исключать' };
+    if (!team.memberIds.includes(memberId)) return { success: false, error: 'Участник не найден' };
+
+    await updateDoc(teamRef, { memberIds: arrayRemove(memberId) });
+    await updateUser(memberId, { teamId: null });
+
+    const member = await getUserById(memberId);
+    await addNotification(memberId, {
+      id: uuidv4(),
+      type: 'system',
+      message: `Вы были исключены из команды "${team.name}"`,
+      read: false,
+      createdAt: Date.now(),
+    });
+    await addLog('TEAM_KICK', ownerId, owner.username, `Исключил ${member?.username || memberId} из ${team.name}`);
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
 export async function leaveTeam(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const user = await getUserById(userId);
