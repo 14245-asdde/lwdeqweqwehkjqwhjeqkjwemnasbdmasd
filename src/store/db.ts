@@ -77,6 +77,46 @@ export interface TournamentBracket {
   generatedAt: number;
 }
 
+// ─── Firestore serialization helpers (no nested arrays allowed) ─
+
+function serializeBracket(bracket: TournamentBracket): any {
+  // Convert rounds: BracketMatch[][] → roundsFlat: { [key: string]: BracketMatch[] }
+  const roundsFlat: Record<string, BracketMatch[]> = {};
+  bracket.rounds.forEach((round, idx) => {
+    roundsFlat[`r${idx}`] = round;
+  });
+  return {
+    eventId: bracket.eventId,
+    generated: bracket.generated,
+    generatedAt: bracket.generatedAt,
+    roundCount: bracket.rounds.length,
+    roundsFlat,
+  };
+}
+
+function deserializeBracket(data: any): TournamentBracket {
+  const rounds: BracketMatch[][] = [];
+  for (let i = 0; i < (data.roundCount || 0); i++) {
+    rounds.push(data.roundsFlat?.[`r${i}`] || []);
+  }
+  return {
+    eventId: data.eventId,
+    generated: data.generated,
+    generatedAt: data.generatedAt,
+    rounds,
+  };
+}
+
+function deserializeEvent(data: any): GameEvent {
+  const raw = { ...data };
+  if (raw.bracketData) {
+    raw.bracket = deserializeBracket(raw.bracketData);
+  } else {
+    raw.bracket = undefined;
+  }
+  return raw as GameEvent;
+}
+
 export interface GameEvent {
   id: string;
   title: string;
@@ -91,7 +131,9 @@ export interface GameEvent {
   status: 'active' | 'ended' | 'cancelled';
   prize: string;
   maxParticipants: number;
+  // bracket is deserialized from bracketData at runtime (never stored as nested array)
   bracket?: TournamentBracket;
+  bracketData?: any; // raw Firestore flat storage
 }
 
 export interface LogEntry {
@@ -667,7 +709,7 @@ export async function leaveEvent(
 export async function getAllEvents(): Promise<GameEvent[]> {
   try {
     const snap = await getDocs(collection(db, 'events'));
-    return snap.docs.map(d => d.data() as GameEvent).sort((a, b) => b.createdAt - a.createdAt);
+    return snap.docs.map(d => deserializeEvent(d.data())).sort((a, b) => b.createdAt - a.createdAt);
   } catch {
     return [];
   }
@@ -677,7 +719,7 @@ export async function getEvent(eventId: string): Promise<GameEvent | null> {
   try {
     const snap = await getDoc(doc(db, 'events', eventId));
     if (!snap.exists()) return null;
-    return snap.data() as GameEvent;
+    return deserializeEvent(snap.data());
   } catch {
     return null;
   }
@@ -770,9 +812,34 @@ export async function getLogs(): Promise<LogEntry[]> {
 
 // ─── Realtime listeners ────────────────────────────────────────
 
+// Track which events we've already auto-ended to avoid loops
+const autoEndedEvents = new Set<string>();
+
 export function listenEvents(callback: (events: GameEvent[]) => void): Unsubscribe {
-  return onSnapshot(collection(db, 'events'), (snap) => {
-    const events = snap.docs.map(d => d.data() as GameEvent).sort((a, b) => b.createdAt - a.createdAt);
+  return onSnapshot(collection(db, 'events'), async (snap) => {
+    const events = snap.docs.map(d => deserializeEvent(d.data())).sort((a, b) => b.createdAt - a.createdAt);
+
+    // Auto-pick winner for expired active events (giveaway & event only, NOT tournament)
+    // Tournament stays active until admin manually ends it via bracket
+    for (const event of events) {
+      if (
+        event.status === 'active' &&
+        Date.now() > event.endsAt &&
+        event.type !== 'tournament' &&
+        !autoEndedEvents.has(event.id)
+      ) {
+        autoEndedEvents.add(event.id);
+        if (event.participants.length > 0) {
+          const shuffled = [...event.participants].sort(() => Math.random() - 0.5);
+          const winners = shuffled.slice(0, 1);
+          await endEvent(event.id, winners);
+          await addLog('AUTO_WINNER', 'system', 'BOT', `Авто-победитель для: ${event.title}`);
+        } else {
+          await endEvent(event.id, []);
+        }
+      }
+    }
+
     callback(events);
   });
 }
@@ -879,7 +946,8 @@ export async function generateBracket(
       generatedAt: Date.now(),
     };
 
-    await updateDoc(eventRef, { bracket });
+    // Serialize to flat structure (Firebase doesn't support nested arrays)
+    await updateDoc(eventRef, { bracketData: serializeBracket(bracket) });
     await addLog('BRACKET_GENERATE', 'admin-001', 'admin', `Сгенерирована сетка для: ${event.title}`);
     return { success: true };
   } catch (e: any) {
@@ -898,7 +966,7 @@ export async function advanceBracket(
     const eventRef = doc(db, 'events', eventId);
     const eventSnap = await getDoc(eventRef);
     if (!eventSnap.exists()) return { success: false, error: 'Событие не найдено' };
-    const event = eventSnap.data() as GameEvent;
+    const event = deserializeEvent(eventSnap.data());
     if (!event.bracket) return { success: false, error: 'Сетка не создана' };
 
     const rounds = event.bracket.rounds.map(r => r.map(m => ({ ...m })));
@@ -935,8 +1003,9 @@ export async function advanceBracket(
     }
 
     const updatedBracket: TournamentBracket = { ...event.bracket, rounds };
+    // Serialize flat to avoid nested arrays in Firestore
     await updateDoc(eventRef, {
-      bracket: updatedBracket,
+      bracketData: serializeBracket(updatedBracket),
       ...(eventWinners.length > 0 ? { winners: eventWinners, status: newStatus } : {}),
     });
 
@@ -949,7 +1018,7 @@ export async function advanceBracket(
 
 export async function resetBracket(eventId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await updateDoc(doc(db, 'events', eventId), { bracket: null });
+    await updateDoc(doc(db, 'events', eventId), { bracketData: null });
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e?.message || 'Ошибка' };

@@ -815,3 +815,246 @@ input[type=range]::-webkit-slider-thumb {
 p { font-size: 15px; line-height: 1.7; }
 span { font-size: inherit; }
 label { font-size: 14px; }
+
+/* ========== EXTRA ANIMATIONS ========== */
+
+/* Neon flicker */
+@keyframes neonFlicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    text-shadow: 0 0 7px rgba(168,85,247,0.9), 0 0 14px rgba(168,85,247,0.6), 0 0 28px rgba(124,58,255,0.5), 0 0 60px rgba(124,58,255,0.2);
+    opacity: 1;
+  }
+  20%, 24%, 55% { text-shadow: none; opacity: 0.85; }
+}
+.neon-flicker { animation: neonFlicker 5s linear infinite; }
+
+/* Scan line sweep */
+@keyframes scanSweep {
+  from { top: -2px; }
+  to { top: 100%; }
+}
+.scan-sweep {
+  position: relative; overflow: hidden;
+}
+.scan-sweep::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,255,140,0.4), transparent);
+  animation: scanSweep 3s linear infinite;
+  pointer-events: none;
+}
+
+/* Card hover 3D tilt */
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0) rotateX(0deg); }
+  50% { transform: translateY(-4px) rotateX(1deg); }
+}
+.card-float { animation: cardFloat 4s ease-in-out infinite; }
+
+/* Neon border rotate */
+@keyframes borderRotate {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+.border-neon-animated {
+  position: relative;
+}
+.border-neon-animated::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7c3aff, #00ff8c, #a855f7, #7c3aff);
+  background-size: 200% 200%;
+  animation: borderRotate 3s linear infinite;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.border-neon-animated:hover::before { opacity: 1; }
+
+/* Matrix rain drops */
+@keyframes matrixDrop {
+  0% { transform: translateY(-100%); opacity: 1; }
+  80% { opacity: 0.6; }
+  100% { transform: translateY(2000px); opacity: 0; }
+}
+
+/* Glitch text */
+@keyframes glitchText {
+  0% { clip-path: inset(40% 0 61% 0); transform: translate(-4px, 0); }
+  20% { clip-path: inset(92% 0 1% 0); transform: translate(4px, 0); }
+  40% { clip-path: inset(43% 0 1% 0); transform: translate(-2px, 0); }
+  60% { clip-path: inset(25% 0 58% 0); transform: translate(2px, 0); }
+  80% { clip-path: inset(54% 0 7% 0); transform: translate(-4px, 0); }
+  100% { clip-path: inset(58% 0 43% 0); transform: translate(4px, 0); }
+}
+.glitch-text {
+  position: relative;
+}
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  background: inherit;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.glitch-text::before {
+  color: #00ff8c;
+  animation: glitchText 4s infinite;
+  animation-delay: 0.1s;
+}
+.glitch-text::after {
+  color: #a855f7;
+  animation: glitchText 4s infinite reverse;
+  animation-delay: 0.05s;
+}
+
+/* Pulse expand ring */
+@keyframes expandRing {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+.expand-ring {
+  position: relative;
+}
+.expand-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid rgba(0,255,140,0.5);
+  animation: expandRing 2s ease-out infinite;
+}
+
+/* Holographic shimmer */
+@keyframes holoShimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.holo-card {
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255,255,255,0.04) 45%,
+    rgba(168,85,247,0.08) 50%,
+    rgba(0,255,140,0.06) 55%,
+    transparent 60%
+  );
+  background-size: 200% 100%;
+  animation: holoShimmer 3s linear infinite;
+}
+
+/* Typing cursor */
+@keyframes typingCursor {
+  0%, 100% { border-right-color: rgba(0,255,140,0.8); }
+  50% { border-right-color: transparent; }
+}
+.typing-cursor {
+  border-right: 2px solid rgba(0,255,140,0.8);
+  animation: typingCursor 1s step-end infinite;
+  padding-right: 4px;
+}
+
+/* Event card extra glow on hover */
+.event-card:hover {
+  box-shadow: 0 24px 70px rgba(0,0,0,0.7), 0 0 40px rgba(124,58,255,0.2), 0 0 1px rgba(168,85,247,0.6);
+}
+
+/* Stat card number pulse */
+@keyframes numberPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+.stat-number { animation: numberPulse 3s ease-in-out infinite; }
+
+/* Loading dots */
+@keyframes loadDot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+  40% { transform: scale(1); opacity: 1; }
+}
+.load-dot-1 { animation: loadDot 1.2s ease-in-out infinite; }
+.load-dot-2 { animation: loadDot 1.2s ease-in-out 0.2s infinite; }
+.load-dot-3 { animation: loadDot 1.2s ease-in-out 0.4s infinite; }
+
+/* Button ripple */
+@keyframes ripple {
+  0% { transform: scale(0); opacity: 0.5; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+/* Orbiting dot */
+@keyframes orbitDot {
+  from { transform: rotate(0deg) translateX(26px) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(26px) rotate(-360deg); }
+}
+.orbit-dot {
+  width: 6px; height: 6px;
+  background: #00ff8c;
+  border-radius: 50%;
+  position: absolute;
+  animation: orbitDot 3s linear infinite;
+  box-shadow: 0 0 8px #00ff8c;
+}
+
+/* Hero section animations */
+@keyframes heroSlideIn {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-slide-in { animation: heroSlideIn 0.8s cubic-bezier(0.23,1,0.32,1) forwards; }
+.hero-slide-in-2 { animation: heroSlideIn 0.8s cubic-bezier(0.23,1,0.32,1) 0.15s forwards; opacity: 0; }
+.hero-slide-in-3 { animation: heroSlideIn 0.8s cubic-bezier(0.23,1,0.32,1) 0.3s forwards; opacity: 0; }
+
+/* Panel enter */
+@keyframes panelEnter {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.panel-enter { animation: panelEnter 0.5s cubic-bezier(0.23,1,0.32,1) forwards; }
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.15);
+  border-top-color: #a855f7;
+  border-right-color: #00ff8c;
+  animation: loadSpin 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+/* Error box */
+.error-box {
+  padding: 13px 16px;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: 9px;
+  color: #f87171;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  animation: panelEnter 0.3s ease;
+}
+
+/* Success box */
+.success-box {
+  padding: 13px 16px;
+  background: rgba(0,255,140,0.07);
+  border: 1px solid rgba(0,255,140,0.2);
+  border-radius: 9px;
+  color: #00ff8c;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  animation: panelEnter 0.3s ease;
+}

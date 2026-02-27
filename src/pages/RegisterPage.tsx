@@ -7,18 +7,10 @@ export function RegisterPage() {
   const [form, setForm] = useState({ username: '', password: '', roblox: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [captcha, setCaptcha] = useState({ a: Math.floor(Math.random()*10+1), b: Math.floor(Math.random()*10+1) });
-  const [captchaAnswer, setCaptchaAnswer] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (parseInt(captchaAnswer) !== captcha.a + captcha.b) {
-      setError('Неверный ответ на капчу!');
-      setCaptcha({ a: Math.floor(Math.random()*10+1), b: Math.floor(Math.random()*10+1) });
-      setCaptchaAnswer('');
-      return;
-    }
     setLoading(true);
     try {
       const res = await register(form.username, form.password, form.roblox);
@@ -28,8 +20,6 @@ export function RegisterPage() {
         navigate('home');
       } else {
         setError(res.error || 'Ошибка регистрации');
-        setCaptcha({ a: Math.floor(Math.random()*10+1), b: Math.floor(Math.random()*10+1) });
-        setCaptchaAnswer('');
       }
     } catch (e: any) {
       setError('Ошибка подключения: ' + e?.message);
@@ -69,19 +59,13 @@ export function RegisterPage() {
               <input className="input-field" type="password" placeholder="Пароль (мин. 6 символов)"
                 value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required />
             </div>
-            <div style={{ marginBottom: '18px' }}>
+            <div style={{ marginBottom: '24px' }}>
               <label className="input-label">ROBLOX НИК</label>
               <input className="input-field" type="text" placeholder="Ваш ник в Roblox"
                 value={form.roblox} onChange={e => setForm(f => ({ ...f, roblox: e.target.value }))} required />
               <div style={{ fontSize: '12px', color: 'rgba(200,180,255,0.35)', marginTop: '5px', fontFamily: 'Rajdhani, sans-serif' }}>
                 Можно менять раз в месяц
               </div>
-            </div>
-
-            <div style={{ marginBottom: '24px' }}>
-              <label className="input-label">КАПЧА: СКОЛЬКО БУДЕТ {captcha.a} + {captcha.b}?</label>
-              <input className="input-field" type="number" placeholder="Ваш ответ"
-                value={captchaAnswer} onChange={e => setCaptchaAnswer(e.target.value)} required />
             </div>
 
             {error && (
