@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LogoImg } from './Logo';
 
 export function LoadingScreen({ onDone }: { onDone: () => void }) {
   const [progress, setProgress] = useState(0);
@@ -63,7 +64,7 @@ export function LoadingScreen({ onDone }: { onDone: () => void }) {
                 style={{ transition: 'stroke-dasharray 0.05s linear' }} />
             </svg>
             <div style={{ position: 'absolute', inset: '12px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,5,25,0.7)' }}>
-              <img src="/p1.png" alt="Traxer Place" style={{ width: '64px', height: '64px', objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(124,58,255,0.7))' }} />
+              <LogoImg size={64} style={{ filter: 'drop-shadow(0 0 12px rgba(124,58,255,0.7))' }} />
             </div>
           </div>
         </div>

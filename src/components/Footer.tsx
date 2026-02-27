@@ -1,4 +1,5 @@
 import { useApp } from '../App';
+import { LogoImg } from './Logo';
 
 export function Footer() {
   const { navigate } = useApp();
@@ -18,7 +19,7 @@ export function Footer() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
               <div style={{ width: '38px', height: '38px', borderRadius: '10px', overflow: 'hidden', background: 'rgba(124,58,255,0.1)', border: '1px solid rgba(124,58,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <img src="/p1.png" alt="logo" style={{ width: '34px', height: '34px', objectFit: 'contain', filter: 'drop-shadow(0 0 5px rgba(124,58,255,0.5))' }} />
+                <LogoImg size={34} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
                 <span className="font-orbitron" style={{ fontSize: '13px', fontWeight: 900, letterSpacing: '0.18em', color: '#e2d9ff' }}>TRAXER</span>
