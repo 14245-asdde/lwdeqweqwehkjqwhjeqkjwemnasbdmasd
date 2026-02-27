@@ -1,12 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../App';
 import {
-  getTeam, createTeam, inviteToTeam, respondToTeamInvite, leaveTeam,
-  changeRobloxUsername, markNotificationRead, getAllEvents, listenUser,
-  getAllUsers,
+  createTeam, inviteToTeam, respondToTeamInvite, leaveTeam,
+  changeRobloxUsername, markNotificationRead, getAllEvents, listenUser, listenTeam,
+  getAllUsers, getUserById, generateTeamInviteLink, useTeamInviteLink,
   type Team, type GameEvent, type Notification
 } from '../store/db';
-import { Confetti } from '../components/Confetti';
 
 export function ProfilePage() {
   const { user, navigate, showToast, refreshUser } = useApp();
@@ -17,45 +16,113 @@ export function ProfilePage() {
   const [newRblx, setNewRblx] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'team' | 'notifications'>('profile');
-  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
-  const [memberRblx, setMemberRblx] = useState<Record<string, string>>({});
-  const [showConfetti, setShowConfetti] = useState(false);
+  const [memberData, setMemberData] = useState<Record<string, { username: string; roblox: string }>>({});
+  const [inviteLink, setInviteLink] = useState('');
+  const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
+  const [inviteToken, setInviteToken] = useState('');
+  const teamUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!user) { navigate('login'); return; }
-    loadData();
-    const unsub = listenUser(user.id, async (u) => {
-      if (u) await refreshUser();
+
+    // Check URL for invite token
+    const hash = window.location.hash;
+    if (hash.startsWith('#invite=')) {
+      const token = hash.replace('#invite=', '');
+      handleUseInviteLink(token);
+    }
+
+    loadMyEvents();
+
+    // Realtime user listener
+    const userUnsub = listenUser(user.id, async (u) => {
+      if (u) {
+        await refreshUser();
+        // If user just joined a team, start listening to that team
+        if (u.teamId && (!team || team.id !== u.teamId)) {
+          startTeamListener(u.teamId);
+        }
+        if (!u.teamId) {
+          if (teamUnsubRef.current) { teamUnsubRef.current(); teamUnsubRef.current = null; }
+          setTeam(null);
+          setMemberData({});
+        }
+      }
     });
-    return () => unsub();
+
+    // Start team listener if user has a team
+    if (user.teamId) {
+      startTeamListener(user.teamId);
+    }
+
+    return () => {
+      userUnsub();
+      if (teamUnsubRef.current) teamUnsubRef.current();
+    };
   }, [user?.id]);
 
-  const loadData = async () => {
-    if (!user) return;
-    if (user.teamId) {
-      const t = await getTeam(user.teamId);
+  const startTeamListener = (teamId: string) => {
+    if (teamUnsubRef.current) teamUnsubRef.current();
+    const unsub = listenTeam(teamId, async (t) => {
       setTeam(t);
       if (t) {
-        // Load all member names
-        const allUsers = await getAllUsers();
-        const names: Record<string, string> = {};
-        const rblx: Record<string, string> = {};
-        t.memberIds.forEach(mid => {
-          const found = allUsers.find(u => u.id === mid);
-          if (found) {
-            names[mid] = found.username;
-            rblx[mid] = found.robloxUsername;
-          }
-        });
-        setMemberNames(names);
-        setMemberRblx(rblx);
+        await loadMemberData(t);
+      }
+    });
+    teamUnsubRef.current = unsub;
+  };
+
+  const loadMemberData = async (t: Team) => {
+    const allUsers = await getAllUsers();
+    const data: Record<string, { username: string; roblox: string }> = {};
+    for (const mid of t.memberIds) {
+      const found = allUsers.find(u => u.id === mid);
+      if (found) {
+        data[mid] = { username: found.username, roblox: found.robloxUsername };
+      } else {
+        // Fetch individually if not in list
+        const u = await getUserById(mid);
+        if (u) data[mid] = { username: u.username, roblox: u.robloxUsername };
       }
     }
+    setMemberData(data);
+  };
+
+  const loadMyEvents = async () => {
+    if (!user) return;
     const events = await getAllEvents();
     setMyEvents(events.filter(e =>
       e.participants.includes(user.id) ||
       (user.teamId && e.participants.includes(user.teamId))
     ));
+  };
+
+  const handleUseInviteLink = async (token: string) => {
+    if (!user) return;
+    const res = await useTeamInviteLink(token, user.id);
+    if (res.success) {
+      showToast(`🎉 Вы вступили в команду "${res.teamName}"!`, 'success');
+      await refreshUser();
+      window.location.hash = '';
+    } else {
+      showToast(res.error || 'Ошибка ссылки', 'error');
+    }
+  };
+
+  const handleGenerateInviteLink = async () => {
+    if (!user || !team) return;
+    setInviteLinkLoading(true);
+    const res = await generateTeamInviteLink(team.id, user.id);
+    if (res.success && res.token) {
+      const url = `${window.location.origin}${window.location.pathname}#invite=${res.token}`;
+      setInviteLink(url);
+      setInviteToken(res.token);
+      try { await navigator.clipboard.writeText(url); showToast('🔗 Ссылка скопирована!', 'success'); }
+      catch { showToast('Ссылка сгенерирована!', 'success'); }
+    } else {
+      showToast(res.error || 'Ошибка', 'error');
+    }
+    setInviteLinkLoading(false);
   };
 
   const handleChangeRblx = async () => {
@@ -64,8 +131,6 @@ export function ProfilePage() {
     const res = await changeRobloxUsername(user.id, newRblx.trim());
     if (res.success) {
       showToast('Roblox ник изменён!', 'success');
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 5000);
       setNewRblx('');
       await refreshUser();
     } else {
@@ -78,15 +143,13 @@ export function ProfilePage() {
     if (!user || !teamName.trim()) return;
     setLoading(true);
     const res = await createTeam(teamName.trim(), user.id);
-    if (res.success && res.team) {
-      setTeam(res.team);
+    if (res.success) {
       showToast('Команда создана!', 'success');
       await refreshUser();
-      await loadData();
+      setTeamName('');
     } else {
       showToast(res.error || 'Ошибка', 'error');
     }
-    setTeamName('');
     setLoading(false);
   };
 
@@ -94,11 +157,8 @@ export function ProfilePage() {
     if (!user || !team || !inviteUsername.trim()) return;
     setLoading(true);
     const res = await inviteToTeam(team.id, user.id, inviteUsername.trim());
-    if (res.success) {
-      showToast('Приглашение отправлено!', 'success');
-    } else {
-      showToast(res.error || 'Ошибка', 'error');
-    }
+    if (res.success) showToast('Приглашение отправлено!', 'success');
+    else showToast(res.error || 'Ошибка', 'error');
     setInviteUsername('');
     setLoading(false);
   };
@@ -108,14 +168,9 @@ export function ProfilePage() {
     setLoading(true);
     const res = await leaveTeam(user.id);
     if (res.success) {
-      setTeam(null);
-      setMemberNames({});
-      setMemberRblx({});
       showToast('Вы покинули команду', 'info');
       await refreshUser();
-    } else {
-      showToast(res.error || 'Ошибка', 'error');
-    }
+    } else showToast(res.error || 'Ошибка', 'error');
     setLoading(false);
   };
 
@@ -125,16 +180,9 @@ export function ProfilePage() {
     if (notif.type === 'team_invite' && notif.data?.teamId) {
       const res = await respondToTeamInvite(user.id, notif.data.teamId, accept);
       if (res.success) {
-        if (accept) {
-          setShowConfetti(true);
-          setTimeout(() => setShowConfetti(false), 4000);
-        }
-        showToast(accept ? 'Вы вступили в команду!' : 'Приглашение отклонено', accept ? 'success' : 'info');
+        showToast(accept ? '🎉 Вы вступили в команду!' : 'Приглашение отклонено', accept ? 'success' : 'info');
         await refreshUser();
-        await loadData();
-      } else {
-        showToast(res.error || 'Ошибка', 'error');
-      }
+      } else showToast(res.error || 'Ошибка', 'error');
     } else {
       await refreshUser();
     }
@@ -155,7 +203,6 @@ export function ProfilePage() {
 
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: '40px 20px 100px' }}>
-      <Confetti active={showConfetti} />
 
       {/* ─── PROFILE HEADER ─── */}
       <div style={{
@@ -203,7 +250,7 @@ export function ProfilePage() {
               {team && (
                 <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif' }}>
                   ⚔ <span style={{ color: '#a855f7', fontWeight: 700 }}>{team.name}</span>
-                  <span style={{ color: 'rgba(200,180,255,0.35)', marginLeft: '6px' }}>({team.memberIds.length} чел.)</span>
+                  <span style={{ color: 'rgba(200,180,255,0.35)', marginLeft: '6px' }}>({team.memberIds.length} игроков)</span>
                 </div>
               )}
               <div style={{ fontSize: '14px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif' }}>
@@ -338,6 +385,23 @@ export function ProfilePage() {
                   {loading ? '...' : '⚔ СОЗДАТЬ'}
                 </button>
               </div>
+
+              {/* Check invite link from input */}
+              <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(124,58,255,0.1)' }}>
+                <div style={{ fontSize: '12px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.1em', marginBottom: '10px' }}>
+                  ИЛИ ВСТУПИТЬ ПО ССЫЛКЕ
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <input className="input-field" style={{ flex: 1, minWidth: '160px' }} placeholder="Вставьте токен приглашения..." value={inviteToken} onChange={e => setInviteToken(e.target.value)} />
+                  <button
+                    onClick={() => inviteToken.trim() && handleUseInviteLink(inviteToken.trim())}
+                    disabled={!inviteToken.trim()}
+                    style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 700, fontFamily: 'Orbitron, monospace', background: 'rgba(124,58,255,0.15)', border: '1px solid rgba(124,58,255,0.4)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', opacity: !inviteToken.trim() ? 0.5 : 1 }}
+                  >
+                    ВСТУПИТЬ
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
             <>
@@ -345,6 +409,7 @@ export function ProfilePage() {
               <div style={{ background: 'rgba(10,8,20,0.97)', border: '1px solid rgba(124,58,255,0.25)', borderLeft: '4px solid #a855f7', borderRadius: '12px', padding: '24px 28px', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '140px', height: '140px', background: 'radial-gradient(circle, rgba(168,85,247,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
+                {/* Team title + leave */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
@@ -355,50 +420,58 @@ export function ProfilePage() {
                       {team.ownerId === user.id ? '👑 Вы лидер команды' : '👤 Вы участник'} · <span style={{ color: '#a855f7' }}>{team.memberIds.length} игроков</span>
                     </div>
                   </div>
-                  <button onClick={handleLeaveTeam} disabled={loading} style={{ padding: '10px 18px', fontSize: '12px', fontWeight: 700, fontFamily: 'Orbitron, monospace', letterSpacing: '0.06em', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.boxShadow = '0 0 15px rgba(239,68,68,0.2)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}>
-                    {loading ? '...' : '✕ ПОКИНУТЬ КОМАНДУ'}
+                  <button onClick={handleLeaveTeam} disabled={loading}
+                    style={{ padding: '10px 18px', fontSize: '12px', fontWeight: 700, fontFamily: 'Orbitron, monospace', letterSpacing: '0.06em', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}>
+                    {loading ? '...' : '✕ ПОКИНУТЬ'}
                   </button>
                 </div>
 
-                {/* Members list */}
-                <div style={{ marginBottom: team.ownerId === user.id ? '20px' : '0' }}>
-                  <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', marginBottom: '12px' }}>
+                {/* Members list — LIVE via onSnapshot */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     СОСТАВ КОМАНДЫ — {team.name}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: 'rgba(0,255,140,0.08)', border: '1px solid rgba(0,255,140,0.2)', borderRadius: '20px' }}>
+                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#00ff8c', animation: 'statusPulse 1.2s infinite', display: 'inline-block' }} />
+                      <span style={{ fontSize: '9px', color: '#00ff8c', fontFamily: 'Orbitron, monospace' }}>LIVE</span>
+                    </span>
                   </div>
                   <div style={{ display: 'grid', gap: '8px' }}>
-                    {team.memberIds.map((mid, i) => {
-                      const mName = memberNames[mid] || (mid === user.id ? user.username : mid.slice(0, 8) + '...');
-                      const mRblx = memberRblx[mid] || (mid === user.id ? user.robloxUsername : '');
+                    {team.memberIds.map((mid) => {
+                      const mData = memberData[mid];
+                      const mName = mData?.username || (mid === user.id ? user.username : mid.slice(0, 8) + '...');
+                      const mRblx = mData?.roblox || (mid === user.id ? user.robloxUsername : '');
                       const isOwner = mid === team.ownerId;
                       const isMe = mid === user.id;
                       return (
-                        <div key={i} style={{
-                          padding: '12px 16px',
+                        <div key={mid} style={{
+                          padding: '14px 16px',
                           background: isMe ? 'rgba(168,85,247,0.1)' : 'rgba(124,58,255,0.05)',
                           border: `1px solid ${isMe ? 'rgba(168,85,247,0.3)' : 'rgba(124,58,255,0.12)'}`,
                           borderRadius: '10px',
-                          display: 'flex', alignItems: 'center', gap: '12px',
+                          display: 'flex', alignItems: 'center', gap: '14px',
                         }}>
                           <div style={{
-                            width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0,
+                            width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0,
                             background: isOwner ? 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(251,191,36,0.1))' : 'rgba(124,58,255,0.12)',
                             border: `1px solid ${isOwner ? 'rgba(251,191,36,0.4)' : 'rgba(124,58,255,0.2)'}`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '14px', fontFamily: 'Orbitron, monospace', fontWeight: 900,
+                            fontSize: '16px', fontFamily: 'Orbitron, monospace', fontWeight: 900,
                             color: isOwner ? '#fbbf24' : '#a855f7',
                           }}>
                             {isOwner ? '👑' : mName[0]?.toUpperCase() || '?'}
                           </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '15px', color: isMe ? '#c084fc' : 'rgba(200,180,255,0.8)', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{mName}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '3px' }}>
+                              <span style={{ fontSize: '16px', color: isMe ? '#c084fc' : 'rgba(200,180,255,0.8)', fontFamily: 'Rajdhani, sans-serif', fontWeight: 700 }}>{mName}</span>
                               {isMe && <span style={{ padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontFamily: 'Orbitron, monospace', background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}>ВЫ</span>}
                               {isOwner && <span style={{ padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontFamily: 'Orbitron, monospace', background: 'rgba(251,191,36,0.12)', color: '#fbbf24' }}>ЛИДЕР</span>}
                             </div>
                             {mRblx && (
-                              <div style={{ fontSize: '12px', color: 'rgba(0,255,140,0.6)', fontFamily: 'Rajdhani, sans-serif' }}>🎮 {mRblx}</div>
+                              <div style={{ fontSize: '13px', color: 'rgba(0,255,140,0.7)', fontFamily: 'Rajdhani, sans-serif', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <span>🎮</span> {mRblx}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -407,16 +480,45 @@ export function ProfilePage() {
                   </div>
                 </div>
 
-                {/* Invite — owner only */}
+                {/* Invite section — owner only */}
                 {team.ownerId === user.id && (
                   <div>
                     <div style={{ height: '1px', background: 'rgba(124,58,255,0.1)', margin: '20px 0' }} />
-                    <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', marginBottom: '12px' }}>ПРИГЛАСИТЬ ИГРОКА</div>
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                      <input className="input-field" style={{ flex: 1, minWidth: '160px' }} placeholder="Логин пользователя сайта..." value={inviteUsername} onChange={e => setInviteUsername(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleInvite()} />
-                      <button onClick={handleInvite} disabled={loading || !inviteUsername.trim()} style={{ padding: '12px 24px', fontSize: '13px', fontWeight: 700, fontFamily: 'Orbitron, monospace', letterSpacing: '0.06em', background: 'linear-gradient(135deg, rgba(124,58,255,0.2), rgba(124,58,255,0.1))', border: '1px solid rgba(124,58,255,0.4)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', opacity: loading || !inviteUsername.trim() ? 0.5 : 1 }}>
-                        {loading ? '...' : '+ ПРИГЛАСИТЬ'}
-                      </button>
+
+                    {/* Invite by username */}
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', marginBottom: '10px' }}>ПРИГЛАСИТЬ ПО ЛОГИНУ</div>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        <input className="input-field" style={{ flex: 1, minWidth: '160px' }} placeholder="Логин пользователя сайта..." value={inviteUsername} onChange={e => setInviteUsername(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleInvite()} />
+                        <button onClick={handleInvite} disabled={loading || !inviteUsername.trim()} style={{ padding: '12px 24px', fontSize: '13px', fontWeight: 700, fontFamily: 'Orbitron, monospace', letterSpacing: '0.06em', background: 'linear-gradient(135deg, rgba(124,58,255,0.2), rgba(124,58,255,0.1))', border: '1px solid rgba(124,58,255,0.4)', color: '#c084fc', borderRadius: '8px', cursor: 'pointer', opacity: loading || !inviteUsername.trim() ? 0.5 : 1 }}>
+                          {loading ? '...' : '+ ПРИГЛАСИТЬ'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Invite link */}
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'rgba(200,180,255,0.35)', fontFamily: 'Orbitron, monospace', letterSpacing: '0.12em', marginBottom: '10px' }}>🔗 ОДНОРАЗОВАЯ ССЫЛКА-ПРИГЛАШЕНИЕ</div>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                        <button
+                          onClick={handleGenerateInviteLink}
+                          disabled={inviteLinkLoading}
+                          style={{ padding: '12px 20px', fontSize: '12px', fontWeight: 700, fontFamily: 'Orbitron, monospace', letterSpacing: '0.06em', background: 'linear-gradient(135deg, rgba(0,200,255,0.15), rgba(0,150,255,0.08))', border: '1px solid rgba(0,200,255,0.3)', color: '#00bfff', borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          {inviteLinkLoading ? '...' : '🔗 ГЕНЕРИРОВАТЬ ССЫЛКУ'}
+                        </button>
+                        {inviteLink && (
+                          <div style={{ flex: 1, minWidth: '200px' }}>
+                            <div style={{ padding: '10px 14px', background: 'rgba(0,200,255,0.06)', border: '1px solid rgba(0,200,255,0.2)', borderRadius: '8px', fontSize: '12px', color: 'rgba(0,200,255,0.8)', fontFamily: 'monospace', wordBreak: 'break-all', cursor: 'pointer' }}
+                              onClick={() => { navigator.clipboard.writeText(inviteLink).catch(() => {}); showToast('Скопировано!', 'success'); }}>
+                              {inviteLink}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'rgba(200,180,255,0.3)', fontFamily: 'Rajdhani, sans-serif', marginTop: '5px' }}>
+                              ⚠ Одноразовая — действует один раз. Нажмите чтобы скопировать.
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

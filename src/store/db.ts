@@ -483,6 +483,74 @@ export async function markNotificationRead(userId: string, notifId: string): Pro
   }
 }
 
+// ─── TEAM INVITE LINKS ─────────────────────────────────────────
+
+export async function generateTeamInviteLink(
+  teamId: string,
+  ownerId: string
+): Promise<{ success: boolean; error?: string; token?: string }> {
+  try {
+    const team = await getTeam(teamId);
+    if (!team) return { success: false, error: 'Команда не найдена' };
+    if (team.ownerId !== ownerId) return { success: false, error: 'Только лидер может генерировать ссылки' };
+
+    const token = uuidv4().replace(/-/g, '').slice(0, 16);
+    const inviteLinkDoc = {
+      id: token,
+      teamId,
+      teamName: team.name,
+      createdBy: ownerId,
+      createdAt: Date.now(),
+      used: false,
+    };
+    await setDoc(doc(db, 'inviteLinks', token), inviteLinkDoc);
+    return { success: true, token };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export async function useTeamInviteLink(
+  token: string,
+  userId: string
+): Promise<{ success: boolean; error?: string; teamName?: string }> {
+  try {
+    const linkRef = doc(db, 'inviteLinks', token);
+    const linkSnap = await getDoc(linkRef);
+    if (!linkSnap.exists()) return { success: false, error: 'Ссылка не найдена или устарела' };
+
+    const link = linkSnap.data();
+    if (link.used) return { success: false, error: 'Эта ссылка уже была использована' };
+
+    const user = await getUserById(userId);
+    if (!user) return { success: false, error: 'Пользователь не найден' };
+    if (user.teamId) return { success: false, error: 'Вы уже состоите в команде' };
+
+    const teamRef = doc(db, 'teams', link.teamId);
+    const teamSnap = await getDoc(teamRef);
+    if (!teamSnap.exists()) return { success: false, error: 'Команда не найдена' };
+    const team = teamSnap.data() as Team;
+
+    // Mark link as used
+    await updateDoc(linkRef, { used: true, usedBy: userId, usedAt: Date.now() });
+
+    // Add user to team
+    await updateDoc(teamRef, { memberIds: arrayUnion(userId) });
+    await updateUser(userId, { teamId: link.teamId });
+    await addLog('TEAM_JOIN_LINK', userId, user.username, `Вступил в команду ${team.name} по ссылке`);
+
+    return { success: true, teamName: team.name };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Ошибка' };
+  }
+}
+
+export function listenTeam(teamId: string, callback: (team: Team | null) => void): Unsubscribe {
+  return onSnapshot(doc(db, 'teams', teamId), (snap) => {
+    callback(snap.exists() ? (snap.data() as Team) : null);
+  });
+}
+
 // ─── TEAMS ─────────────────────────────────────────────────────
 
 export async function createTeam(
@@ -863,6 +931,14 @@ export function listenEvents(callback: (events: GameEvent[]) => void): Unsubscri
 export function listenUser(userId: string, callback: (user: User | null) => void): Unsubscribe {
   return onSnapshot(doc(db, 'users', userId), (snap) => {
     callback(snap.exists() ? (snap.data() as User) : null);
+  });
+}
+
+// Realtime listener for a single event (for bracket live updates)
+export function listenEvent(eventId: string, callback: (event: GameEvent | null) => void): Unsubscribe {
+  return onSnapshot(doc(db, 'events', eventId), (snap) => {
+    if (!snap.exists()) { callback(null); return; }
+    callback(deserializeEvent(snap.data()));
   });
 }
 

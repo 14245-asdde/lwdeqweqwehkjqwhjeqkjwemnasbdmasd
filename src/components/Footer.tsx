@@ -1,4 +1,14 @@
+import { useApp } from '../App';
+
 export function Footer() {
+  const { navigate } = useApp();
+
+  const navLinks = [
+    { label: 'Главная', page: 'home' },
+    { label: 'Ивенты', page: 'events' },
+    { label: 'Профиль', page: 'profile' },
+  ];
+
   return (
     <footer style={{ position: 'relative', zIndex: 10, background: 'rgba(5,5,12,0.9)', borderTop: '1px solid rgba(124,58,255,0.12)', marginTop: 'auto' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
@@ -21,7 +31,7 @@ export function Footer() {
                 </span>
               </div>
             </div>
-            <p style={{ fontSize: '15px', color: 'rgba(200,180,255,0.4)', lineHeight: '1.7' }}>
+            <p style={{ fontSize: '14px', color: 'rgba(200,180,255,0.4)', lineHeight: '1.7' }}>
               Платформа розыгрышей и турниров для Roblox сообщества. Защита от мультиаккаунтов.
             </p>
           </div>
@@ -32,12 +42,20 @@ export function Footer() {
               Навигация
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {['Главная', 'Ивенты', 'Профиль'].map(link => (
-                <span key={link} style={{ fontSize: '15px', color: 'rgba(200,180,255,0.4)', cursor: 'pointer', transition: 'color 0.2s' }}
+              {navLinks.map(link => (
+                <button
+                  key={link.page}
+                  onClick={() => navigate(link.page as any)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left',
+                    fontSize: '15px', color: 'rgba(200,180,255,0.4)', transition: 'color 0.2s',
+                    fontFamily: 'Rajdhani, sans-serif', fontWeight: 600,
+                  }}
                   onMouseEnter={e => (e.currentTarget.style.color = '#c084fc')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'rgba(200,180,255,0.4)')}>
-                  {link}
-                </span>
+                  onMouseLeave={e => (e.currentTarget.style.color = 'rgba(200,180,255,0.4)')}
+                >
+                  → {link.label}
+                </button>
               ))}
             </div>
           </div>
@@ -69,7 +87,7 @@ export function Footer() {
         {/* Bottom */}
         <div style={{ marginTop: '32px', paddingTop: '20px', borderTop: '1px solid rgba(124,58,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <span className="font-mono-tech" style={{ fontSize: '13px', color: 'rgba(200,180,255,0.25)' }}>
-            © 2024 Traxer Place. All rights reserved.
+            © 2026 Traxer Place. All rights reserved.
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="status-dot-active" />
