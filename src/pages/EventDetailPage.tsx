@@ -7,6 +7,7 @@ import {
 } from '../store/db';
 import { TournamentBracketView } from '../components/TournamentBracket';
 import { Fireworks } from '../components/Fireworks';
+import { Confetti } from '../components/Confetti';
 
 // ─── Flip Digit ────────────────────────────────────────────────
 function FlipDigit({ value, prev }: { value: string; prev: string }) {
@@ -110,6 +111,7 @@ function WinnerReveal({ winners, eventType, onReveal }: { winners: string[]; eve
   const [spinning, setSpinning] = useState(true);
   const [spinText, setSpinText] = useState('');
   const [showFireworks, setShowFireworks] = useState(false);
+  const [showConfettiState, setShowConfettiState] = useState(false);
   const calledRef = useRef(false);
 
   const mockNames = ['Shadow', 'Blaze', 'Nexus', 'Phantom', 'Storm', 'Viper', 'Titan', 'Nova', 'Raven', 'Ace'];
@@ -130,9 +132,10 @@ function WinnerReveal({ winners, eventType, onReveal }: { winners: string[]; eve
             if (i === 0 && !calledRef.current) {
               calledRef.current = true;
               setShowFireworks(true);
+              setShowConfettiState(true);
               onReveal?.();
-              // Stop fireworks after 8 seconds
-              setTimeout(() => setShowFireworks(false), 8000);
+              // Stop after 10 seconds
+              setTimeout(() => { setShowFireworks(false); setShowConfettiState(false); }, 10000);
             }
           }, i * 500 + 200);
         });
@@ -146,6 +149,7 @@ function WinnerReveal({ winners, eventType, onReveal }: { winners: string[]; eve
   return (
     <>
       <Fireworks active={showFireworks} />
+      <Confetti active={showConfettiState} />
       <div style={{
         padding: '32px',
         background: 'rgba(0,255,140,0.04)',

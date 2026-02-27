@@ -327,8 +327,24 @@ export async function login(
 ): Promise<{ success: boolean; error?: string; user?: User }> {
   try {
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('username', '==', username), where('password', '==', password));
-    const snap = await getDocs(q);
+    // Try exact match first
+    const q = query(usersRef, where('username', '==', username.trim()), where('password', '==', password));
+    let snap = await getDocs(q);
+    // If not found, try case-insensitive by fetching all and comparing
+    if (snap.empty) {
+      const allSnap = await getDocs(usersRef);
+      const matched = allSnap.docs.find(d => {
+        const u = d.data() as User;
+        return u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password;
+      });
+      if (matched) {
+        const user = matched.data() as User;
+        if (user.banned) return { success: false, error: `Аккаунт заблокирован: ${user.banReason}` };
+        setSessionUserId(user.id);
+        await addLog('LOGIN', user.id, user.username, 'Вход в систему');
+        return { success: true, user };
+      }
+    }
 
     if (snap.empty) return { success: false, error: 'Неверный логин или пароль' };
 
