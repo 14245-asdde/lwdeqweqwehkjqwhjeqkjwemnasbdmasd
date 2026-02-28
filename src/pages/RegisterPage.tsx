@@ -74,12 +74,7 @@ export function RegisterPage() {
             </p>
           </div>
 
-          <div style={{ padding: '12px 14px', background: 'rgba(124,58,255,0.06)', border: '1px solid rgba(124,58,255,0.15)', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '16px' }}>🛡️</span>
-            <span style={{ fontSize: '13px', color: 'rgba(200,180,255,0.5)', fontFamily: 'Rajdhani, sans-serif', lineHeight: '1.5' }}>
-              Антибот система активна. Мультиаккаунты определяются автоматически.
-            </span>
-          </div>
+          <div style={{ height: '8px' }} />
 
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: '18px' }}>

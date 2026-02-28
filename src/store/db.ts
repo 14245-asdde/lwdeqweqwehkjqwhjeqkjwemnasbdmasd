@@ -33,8 +33,6 @@ export interface User {
   robloxResetGranted: boolean;
   isAdmin: boolean;
   createdAt: number;
-  fingerprint: string;
-  ipHash: string;
   teamId: string | null;
   notifications: Notification[];
   banned: boolean;
@@ -161,48 +159,28 @@ export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
 }
 
-// ─── Anti-bot fingerprinting ───────────────────────────────────
+// ─── Cookie anti-twink ────────────────────────────────────────
 
-export function generateFingerprint(): string {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.textBaseline = 'top';
-    ctx.font = '14px Arial';
-    ctx.fillText('traxer_fp', 2, 2);
+const COOKIE_KEY = 'traxer_registered';
+
+export function getRegistrationCookie(): string | null {
+  const cookies = document.cookie.split(';');
+  for (const c of cookies) {
+    const [key, val] = c.trim().split('=');
+    if (key === COOKIE_KEY) return val || null;
   }
-  const nav = [
-    navigator.userAgent,
-    navigator.language,
-    screen.width + 'x' + screen.height,
-    screen.colorDepth,
-    new Date().getTimezoneOffset(),
-    navigator.hardwareConcurrency || 0,
-    (navigator as any).deviceMemory || 0,
-    navigator.platform,
-    canvas.toDataURL(),
-  ].join('|');
-  let hash = 0;
-  for (let i = 0; i < nav.length; i++) {
-    hash = ((hash << 5) - hash) + nav.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return 'fp_' + Math.abs(hash).toString(36);
+  return null;
 }
 
-export function generateIPHash(): string {
-  const pseudo = [
-    navigator.userAgent,
-    screen.width, screen.height,
-    navigator.language,
-    navigator.platform,
-  ].join('_');
-  let hash = 0;
-  for (let i = 0; i < pseudo.length; i++) {
-    hash = ((hash << 5) - hash) + pseudo.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return 'ip_' + Math.abs(hash).toString(36);
+export function setRegistrationCookie(userId: string): void {
+  // 10 years expiry
+  const expires = new Date();
+  expires.setFullYear(expires.getFullYear() + 10);
+  document.cookie = `${COOKIE_KEY}=${userId}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
+}
+
+export function clearRegistrationCookie(): void {
+  document.cookie = `${COOKIE_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
 }
 
 // ─── Duration parser ───────────────────────────────────────────
@@ -242,8 +220,6 @@ export async function initDB(): Promise<void> {
         robloxResetGranted: false,
         isAdmin: true,
         createdAt: Date.now(),
-        fingerprint: 'admin-fp',
-        ipHash: 'admin-ip',
         teamId: null,
         notifications: [],
         banned: false,
@@ -264,8 +240,15 @@ export async function register(
   robloxUsername: string
 ): Promise<{ success: boolean; error?: string; user?: User }> {
   try {
-    const fp = generateFingerprint();
-    const ipHash = generateIPHash();
+    // Anti-twink: cookie check — one account per browser
+    const existingCookie = getRegistrationCookie();
+    if (existingCookie) {
+      return { success: false, error: '🚫 На этом браузере уже зарегистрирован аккаунт. Мультиаккаунты запрещены!' };
+    }
+
+    if (username.length < 3) return { success: false, error: 'Имя пользователя минимум 3 символа' };
+    if (password.length < 6) return { success: false, error: 'Пароль минимум 6 символов' };
+    if (robloxUsername.length < 3) return { success: false, error: 'Roblox ник минимум 3 символа' };
 
     const usersRef = collection(db, 'users');
 
@@ -279,20 +262,6 @@ export async function register(
     const rbxSnap = await getDocs(rbxQ);
     if (!rbxSnap.empty) return { success: false, error: 'Этот Roblox ник уже привязан к другому аккаунту' };
 
-    // Anti-twink: fingerprint check
-    const fpQ = query(usersRef, where('fingerprint', '==', fp), where('isAdmin', '==', false));
-    const fpSnap = await getDocs(fpQ);
-    if (!fpSnap.empty) return { success: false, error: '🚫 Обнаружен дубликат аккаунта. Создание твинков запрещено!' };
-
-    // Anti-twink: IP check
-    const ipQ = query(usersRef, where('ipHash', '==', ipHash), where('isAdmin', '==', false));
-    const ipSnap = await getDocs(ipQ);
-    if (!ipSnap.empty) return { success: false, error: '🚫 С данного устройства уже зарегистрирован аккаунт. Мультиаккаунт запрещён!' };
-
-    if (username.length < 3) return { success: false, error: 'Имя пользователя минимум 3 символа' };
-    if (password.length < 6) return { success: false, error: 'Пароль минимум 6 символов' };
-    if (robloxUsername.length < 3) return { success: false, error: 'Roblox ник минимум 3 символа' };
-
     const id = uuidv4();
     const newUser: User = {
       id,
@@ -303,8 +272,6 @@ export async function register(
       robloxResetGranted: false,
       isAdmin: false,
       createdAt: Date.now(),
-      fingerprint: fp,
-      ipHash,
       teamId: null,
       notifications: [],
       banned: false,
@@ -312,8 +279,9 @@ export async function register(
     };
 
     await setDoc(doc(db, 'users', id), newUser);
-    await addLog('REGISTER', id, username, `Новый пользователь. FP: ${fp}`);
+    await addLog('REGISTER', id, username, `Новый пользователь зарегистрирован`);
     setSessionUserId(id);
+    setRegistrationCookie(id);
 
     return { success: true, user: newUser };
   } catch (e: any) {
